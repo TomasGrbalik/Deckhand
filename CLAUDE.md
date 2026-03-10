@@ -45,7 +45,7 @@ research/                Research docs (reference only, not part of the tool)
 
 ## Implementation Phases
 
-See `design/phases.md` for full details. Current phase: **Phase 1 — Skeleton & Core Lifecycle**.
+See `design/phases/` for full details. Current phase: **Phase 1 — Skeleton & Core Lifecycle**.
 
 ## Conventions
 
@@ -58,6 +58,6 @@ See `design/phases.md` for full details. Current phase: **Phase 1 — Skeleton &
 ## For Agents
 
 - Before starting work, validate that this CLAUDE.md still reflects the actual codebase. If the structure, conventions, or architecture have drifted, update this file first.
-- Check `design/phases.md` to understand what phase we're in and what's been completed.
+- Check `design/phases/` to understand what phase we're in and what's been completed.
 - Read the relevant design docs before implementing — don't guess at the intended behavior.
 - The user is learning Go — explain Go-specific decisions when they're non-obvious.
