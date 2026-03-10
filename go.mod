@@ -1,4 +1,4 @@
-module github.com/TomasGrbalik/Deckhand
+module github.com/TomasGrbalik/deckhand
 
 go 1.23
 

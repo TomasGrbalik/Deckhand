@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/TomasGrbalik/Deckhand/internal/cli"
+	"github.com/TomasGrbalik/deckhand/internal/cli"
 )
 
 func main() {

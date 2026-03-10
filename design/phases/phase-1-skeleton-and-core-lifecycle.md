@@ -32,7 +32,7 @@ What's NOT in this phase (comes later):
 Initialize Go module and directory structure. After this task, `go build ./cmd/deckhand` produces a binary that prints help text.
 
 Files to create:
-- `go.mod` — module `github.com/TomasGrbalik/Deckhand`
+- `go.mod` — module `github.com/TomasGrbalik/deckhand`
 - `cmd/deckhand/main.go` — entry point, calls `cli.Execute()`
 - `internal/cli/root.go` — root Cobra command with `--version`, `--verbose` flags
 - `.gitignore` — Go binaries, `.deckhand/` directory
