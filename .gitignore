@@ -1,0 +1,12 @@
+# Go binaries
+/deckhand
+*.exe
+
+# Generated files
+.deckhand/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
