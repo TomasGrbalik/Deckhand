@@ -1,0 +1,277 @@
+# Deckhand: Command Surface
+
+## Global Flags
+
+```
+--project, -p <name>    Override project name (default: directory name)
+--config <path>         Override config file path (default: .deckhand.yaml)
+--verbose, -v           Verbose output
+--help, -h              Help for any command
+--version               Print version
+```
+
+---
+
+## Project Lifecycle
+
+### `deckhand init`
+
+Interactive setup. Creates `.deckhand.yaml` in the current directory.
+
+```
+deckhand init [--template <name>]
+```
+
+Prompts (via huh forms):
+- Template selection (if not passed via flag)
+- Additional services (postgres, redis, etc.)
+- Project name (default: current directory name)
+
+Output: `.deckhand.yaml` written.
+
+### `deckhand up`
+
+Renders docker-compose.yml from config, builds images if needed, starts all services.
+
+```
+deckhand up [--build] [--detach]
+```
+
+- `--build` — Force image rebuild
+- `--detach` — Default behavior (containers run in background). Included for explicitness.
+
+Steps:
+1. Read `.deckhand.yaml`
+2. Render `.deckhand/docker-compose.yml` (with DO NOT EDIT header)
+3. Build devcontainer image if needed
+4. `docker compose up -d`
+5. Wait for health checks
+6. Print status table + connect command
+
+### `deckhand down`
+
+Stops all containers. Preserves volumes.
+
+```
+deckhand down
+```
+
+### `deckhand destroy`
+
+Stops containers, removes volumes, networks, and generated files in `.deckhand/`.
+
+```
+deckhand destroy [--yes]
+```
+
+- `--yes` — Skip confirmation prompt
+
+### `deckhand list`
+
+Shows all deckhand-managed environments on this host.
+
+```
+deckhand list
+```
+
+Output:
+```
+PROJECT      STATUS    SERVICES          UPTIME
+my-api       running   devcontainer,pg   2h 15m
+frontend     stopped   devcontainer      —
+```
+
+### `deckhand status`
+
+Detailed status for the current project.
+
+```
+deckhand status
+```
+
+Output:
+```
+PROJECT: my-api (running)
+
+SERVICE          IMAGE                    STATUS     PORTS
+devcontainer     deckhand-my-api:latest   running    8080, 3000
+postgres         postgres:16-alpine       healthy    5432 (internal)
+redis            redis:7-alpine           healthy    (internal)
+
+Connect command:
+  ssh -N -L 8080:localhost:8080 -L 3000:localhost:3000 user@100.64.1.3
+```
+
+---
+
+## Working Inside Containers
+
+### `deckhand shell`
+
+Opens an interactive shell in the devcontainer.
+
+```
+deckhand shell [--service <name>] [--cmd <command>]
+```
+
+- `--service` — Target a different service (default: devcontainer)
+- `--cmd` — Shell command (default: user's shell from template, typically zsh)
+
+Full TTY, SIGWINCH forwarding, raw mode — Neovim/tmux must work.
+
+### `deckhand exec`
+
+Runs a one-off command in the devcontainer.
+
+```
+deckhand exec <command> [args...]
+```
+
+Examples:
+```
+deckhand exec go test ./...
+deckhand exec npm run build
+```
+
+### `deckhand logs`
+
+Streams logs from services.
+
+```
+deckhand logs [<service>] [--follow] [--tail <n>]
+```
+
+- No service specified: all services interleaved
+- `--follow, -f` — Stream continuously
+- `--tail <n>` — Last n lines (default: 100)
+
+---
+
+## Port Management
+
+### `deckhand port list`
+
+Shows all port mappings for the current project.
+
+```
+deckhand port list
+```
+
+Output:
+```
+PORT   NAME          PROTOCOL   ACCESS
+8080   code-server   http       ssh -L 8080:localhost:8080
+3000   api           http       ssh -L 3000:localhost:3000
+5432   postgres      tcp        internal only
+```
+
+### `deckhand port add`
+
+Adds a port mapping. Triggers container recreate.
+
+```
+deckhand port add <port> [--name <label>] [--protocol <http|tcp>]
+```
+
+### `deckhand port remove`
+
+Removes a port mapping. Triggers container recreate.
+
+```
+deckhand port remove <port>
+```
+
+### `deckhand connect`
+
+Prints the SSH tunnel command with all external ports.
+
+```
+deckhand connect
+```
+
+Output:
+```
+ssh -N -L 8080:localhost:8080 -L 3000:localhost:3000 user@100.64.1.3
+```
+
+Reads SSH host from global config (`~/.config/deckhand/config.yaml`).
+
+---
+
+## Templates
+
+### `deckhand template list`
+
+Shows available templates (bundled + external when supported later).
+
+```
+deckhand template list
+```
+
+Output:
+```
+NAME     DESCRIPTION              SERVICES
+base     Minimal dev container    —
+go       Go development           —
+node     Node.js development      —
+python   Python development       —
+```
+
+---
+
+## Configuration Files
+
+### `.deckhand.yaml` (project-level, version controlled)
+
+```yaml
+project: my-api
+template: go
+
+services:
+  postgres:
+    enabled: true
+    version: "16"
+  redis:
+    enabled: true
+
+ports:
+  - port: 3000
+    name: api
+    protocol: http
+  - port: 8080
+    name: code-server
+    protocol: http
+
+env:
+  DATABASE_URL: postgresql://dev:secret@postgres:5432/appdb
+```
+
+### `~/.config/deckhand/config.yaml` (global)
+
+```yaml
+ssh:
+  user: dev
+  host: 100.64.1.3
+
+defaults:
+  template: base
+  shell: zsh
+```
+
+---
+
+## Generated Artifacts
+
+### `.deckhand/docker-compose.yml`
+
+Generated by `deckhand up`. Header:
+
+```yaml
+# Generated by deckhand — DO NOT EDIT
+# Source: .deckhand.yaml
+# Regenerate with: deckhand up
+```
+
+### `.deckhand/Dockerfile`
+
+Generated from template. Same DO NOT EDIT header.
