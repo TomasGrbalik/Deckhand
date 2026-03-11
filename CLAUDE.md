@@ -55,6 +55,22 @@ See `design/phases/` for full details. Current phase: **Phase 1 — Skeleton & C
 - Container labels use `dev.deckhand.*` prefix for discovery.
 - All Docker ports bind to `127.0.0.1` only.
 
+## Quick Reference
+
+```bash
+go build ./...          # Build project
+go test ./...           # Run tests
+golangci-lint run ./... # Run linter
+golangci-lint fmt ./... # Format code
+```
+
+## Quality Gate
+
+- Tests must pass before completing any task
+- `go test ./...` at the end of every task
+- Run `go mod tidy` after adding/removing dependencies
+- Quality hooks run automatically — don't disable them
+
 ## For Agents
 
 - Before starting work, validate that this CLAUDE.md still reflects the actual codebase. If the structure, conventions, or architecture have drifted, update this file first.

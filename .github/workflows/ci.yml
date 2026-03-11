@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - name: Run tests with coverage
+        run: |
+          CGO_ENABLED=1 go tool gotestsum --format standard-verbose --junitfile report.xml -- \
+            -race -coverprofile=coverage.out -covermode=atomic -coverpkg=./... -count=1 -shuffle=on ./...
+      - name: Check coverage threshold
+        run: go tool go-test-coverage --config=.testcoverage.yml
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+        if: github.event_name == 'pull_request'
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: "v2.11.3"
+      - name: Check formatting
+        run: |
+          OUTPUT=$(golangci-lint fmt --diff ./... 2>&1)
+          if [ -n "$OUTPUT" ]; then
+            echo "$OUTPUT"
+            exit 1
+          fi
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - name: Run vulnerability check
+        run: go tool govulncheck ./...
+      - name: Verify module integrity
+        run: go mod verify
+
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate semver
+        run: |
+          VERSION=$(awk -F'"' '/var Version/ {print $2}' internal/cli/root.go)
+          echo "Detected version: $VERSION"
+          if [ "$VERSION" = "dev" ]; then
+            echo "Development version — skipping semver validation"
+            exit 0
+          fi
+          echo "$VERSION" | grep -qE '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+\.)*[0-9A-Za-z-]+)?(\+([0-9A-Za-z-]+\.)*[0-9A-Za-z-]+)?$' || { echo "ERROR: Version '$VERSION' is not valid semver 2.0"; exit 1; }
+          echo "Version is valid semver 2.0"
