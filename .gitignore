@@ -5,6 +5,12 @@
 # Generated files
 .deckhand/
 
+# Quality gate artifacts
+coverage.out
+
+# Claude Code hook debug logs
+.claude/hooks/hook-debug.log
+
 # IDE
 .idea/
 .vscode/

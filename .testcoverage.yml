@@ -1,0 +1,12 @@
+profile: coverage.out
+threshold:
+  file: 50
+  package: 55
+  total: 60
+exclude:
+  paths:
+    - \.pb\.go$
+    - _mock\.go$
+    - ^vendor/
+    - ^cmd/.*/main\.go$
+    - ^internal/cli/
