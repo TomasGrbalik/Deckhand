@@ -72,7 +72,7 @@ Create the simplest possible dev container template. Lives in `templates/base/`.
 - Creates a non-root user (`dev`, UID 1000)
 - Sets working directory to `/workspace`
 
-`compose.yml.tmpl`:
+`compose.yaml.tmpl`:
 - Single `devcontainer` service
 - Bind-mounts current directory to `/workspace`
 - Ports: `127.0.0.1:8080:8080` (hardcoded for now)
@@ -94,7 +94,7 @@ type TemplateSource interface {
 }
 ```
 
-The embedded template loader (`internal/infra/template/embedded.go`) implements this interface. Later, a git-based loader will too.
+The embedded template loader (`internal/infra/template/embedded.go`) implements this interface. Currently `Load` is a package-level function — task 5 should wrap it in a struct type to satisfy the interface. Later, a git-based loader will too.
 
 **Tests:** Render the base template with a test project config. Verify output contains expected service name, port bindings, image name, volume mounts.
 
