@@ -14,7 +14,7 @@ import (
 // Load reads a .deckhand.yaml file at path and returns the parsed Project.
 func Load(path string) (*domain.Project, error) {
 	if _, err := os.Stat(path); err != nil {
-		return nil, fmt.Errorf("config file not found: %s", path)
+		return nil, fmt.Errorf("config file not found %s: %w", path, err)
 	}
 
 	k := koanf.New(".")

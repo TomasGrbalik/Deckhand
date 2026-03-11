@@ -87,3 +87,30 @@ func TestLoad_InvalidYAML(t *testing.T) {
 		t.Fatal("Load() should return error for invalid YAML")
 	}
 }
+
+func TestLoad_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	if err := os.WriteFile(cfgPath, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	proj, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if proj.Name != "" {
+		t.Errorf("Name = %q, want empty", proj.Name)
+	}
+	if proj.Template != "" {
+		t.Errorf("Template = %q, want empty", proj.Template)
+	}
+	if len(proj.Ports) != 0 {
+		t.Errorf("len(Ports) = %d, want 0", len(proj.Ports))
+	}
+	if len(proj.Env) != 0 {
+		t.Errorf("len(Env) = %d, want 0", len(proj.Env))
+	}
+}
