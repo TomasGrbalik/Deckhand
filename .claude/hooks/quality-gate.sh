@@ -13,15 +13,28 @@ debuglog "=== HOOK STARTED (pid=$$) ==="
 
 cd "${CLAUDE_PROJECT_DIR:-.}"
 
+# Helper: resolve tool command — prefer go tool when tool directives exist,
+# fall back to standalone binary. Returns empty string if neither available.
+resolve_tool() {
+    local tool="$1"
+    if go tool "$tool" --help &>/dev/null 2>&1; then
+        echo "go tool $tool"
+    elif command -v "$tool" &>/dev/null; then
+        echo "$tool"
+    else
+        echo ""
+    fi
+}
+
 declare -A TOOL_HINTS
 TOOL_HINTS=(
     [go-test]="Read the failing test and the source it tests. Run 'go test -v -run TestName ./pkg/...' to see the full output. Fix the source code, not the test, unless the test itself is wrong."
-    [coverage]="Run 'go tool cover -func=coverage.out' to see which functions are uncovered. Add tests for the uncovered code paths."
+    [coverage]="Run 'go tool cover -func=coverage.out' to see which functions are uncovered. Add tests for the uncovered code paths. Use '-coverpkg=./...' to include cross-package coverage."
     [golangci-lint]="Read the file at the reported line. The linter name is shown in brackets. Run 'golangci-lint run ./path/to/pkg/...' to re-check a single package after fixing."
     [golangci-fmt]="Run 'golangci-lint fmt ./...' to auto-fix all formatting issues. If specific files need attention, run 'gofumpt -w <file>' directly."
     [govulncheck]="Run 'govulncheck ./...' to see full vulnerability details. Update the affected dependency: 'go get <module>@latest' then 'go mod tidy'."
-    [go-mod-verify]="Run 'go mod verify' to check module integrity. If checksums don't match, run 'go mod download' to re-fetch."
-    [go-mod-tidy]="Run 'go mod tidy' to clean up go.mod and go.sum. Check for unused imports in source code."
+    [go-mod-verify]="Run 'go mod verify' to check module integrity. If checksums don't match, run 'go mod download' to re-fetch. For persistent issues, delete go.sum and run 'go mod tidy'."
+    [go-mod-tidy]="Run 'go mod tidy' to clean up go.mod and go.sum. Check for unused imports in source code that may have kept a dependency alive."
     [semver-format]="The version string in internal/cli/root.go does not follow semver 2.0 format (MAJOR.MINOR.PATCH[-prerelease][+build]). Read internal/cli/root.go and fix the version constant."
 )
 
@@ -62,17 +75,24 @@ run_check_nonempty() {
 }
 
 # Checks ordered by speed and likelihood of failure.
-# Race detector requires CGo/gcc — enabled in CI, skipped locally if gcc is absent.
+# Race detector requires CGo/gcc — enabled when gcc is available.
 if command -v gcc &>/dev/null; then
     RACE_FLAG="-race"
 else
     RACE_FLAG=""
 fi
 run_check        "go-test"        go test $RACE_FLAG -coverprofile=coverage.out -covermode=atomic -coverpkg=./... -count=1 -failfast -shuffle=on ./...
-run_check        "coverage"       go tool go-test-coverage --config=.testcoverage.yml
-run_check        "golangci-lint"  golangci-lint run ./...
-run_check_nonempty "golangci-fmt" golangci-lint fmt --diff ./...
-run_check        "govulncheck"    go tool govulncheck ./...
+
+COVERAGE_CMD=$(resolve_tool go-test-coverage)
+[ -n "$COVERAGE_CMD" ] && run_check "coverage" $COVERAGE_CMD --config=.testcoverage.yml
+
+LINT_CMD=$(resolve_tool golangci-lint)
+[ -n "$LINT_CMD" ] && run_check "golangci-lint" $LINT_CMD run ./...
+[ -n "$LINT_CMD" ] && run_check_nonempty "golangci-fmt" $LINT_CMD fmt --diff ./...
+
+VULNCHECK_CMD=$(resolve_tool govulncheck)
+[ -n "$VULNCHECK_CMD" ] && run_check "govulncheck" $VULNCHECK_CMD ./...
+
 run_check        "go-mod-verify"  go mod verify
 run_check_nonempty "go-mod-tidy"  go mod tidy -diff
 

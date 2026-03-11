@@ -5,9 +5,23 @@ cd "${CLAUDE_PROJECT_DIR:-.}"
 
 WARNINGS=""
 
+# Helper: resolve tool command — prefer go tool when tool directives exist,
+# fall back to standalone binary.
+resolve_tool() {
+    local tool="$1"
+    if go tool "$tool" --help &>/dev/null 2>&1; then
+        echo "go tool $tool"
+    elif command -v "$tool" &>/dev/null; then
+        echo "$tool"
+    else
+        echo ""
+    fi
+}
+
 # 1. Vulnerability check
-if go tool govulncheck -help &>/dev/null 2>&1; then
-    VULN_OUTPUT=$(go tool govulncheck ./... 2>&1)
+GOVULNCHECK_CMD=$(resolve_tool govulncheck)
+if [ -n "$GOVULNCHECK_CMD" ]; then
+    VULN_OUTPUT=$($GOVULNCHECK_CMD ./... 2>&1)
     VULN_EXIT=$?
     if [ $VULN_EXIT -ne 0 ]; then
         WARNINGS="${WARNINGS}VULNERABILITIES (govulncheck):\n${VULN_OUTPUT}\n\n"
@@ -30,7 +44,8 @@ fi
 if [ -n "$WARNINGS" ]; then
     echo -e "Session start checks found issues:\n${WARNINGS}" >&2
     echo "These are non-blocking warnings. Consider fixing them during this session." >&2
-    echo "Re-run this check with: bash \"${CLAUDE_PROJECT_DIR:-.}\"/.claude/hooks/session-start.sh" >&2
+    HOOK_PATH="${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/session-start.sh"
+    echo "Re-run this check with: bash \"${HOOK_PATH}\"" >&2
     exit 0
 fi
 

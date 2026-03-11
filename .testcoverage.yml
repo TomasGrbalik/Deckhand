@@ -8,5 +8,5 @@ exclude:
     - \.pb\.go$
     - _mock\.go$
     - ^vendor/
-    - ^cmd/
+    - ^cmd/.*/main\.go$
     - ^internal/cli/

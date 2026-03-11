@@ -6,7 +6,7 @@
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
-        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/per-edit-fix.sh", "timeout": 60 }]
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/per-edit-fix.sh", "timeout": 30 }]
       }
     ],
     "Stop": [
