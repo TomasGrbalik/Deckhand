@@ -50,12 +50,14 @@ func (s *TemplateService) Render(project domain.Project) (*RenderedOutput, error
 		return nil, fmt.Errorf("loading template %q: %w", name, err)
 	}
 
-	dockerfile, err := render("Dockerfile", dockerfileTmpl, buildTemplateData(project))
+	data := buildTemplateData(project)
+
+	dockerfile, err := render("Dockerfile", dockerfileTmpl, data)
 	if err != nil {
 		return nil, fmt.Errorf("rendering Dockerfile: %w", err)
 	}
 
-	compose, err := render("compose", composeTmpl, buildTemplateData(project))
+	compose, err := render("compose", composeTmpl, data)
 	if err != nil {
 		return nil, fmt.Errorf("rendering compose: %w", err)
 	}
