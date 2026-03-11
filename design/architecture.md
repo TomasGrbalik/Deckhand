@@ -80,13 +80,13 @@ deckhand/
 ├── templates/               # Bundled template files (embedded into binary at build)
 │   ├── base/
 │   │   ├── Dockerfile.tmpl
-│   │   └── compose.yml.tmpl
+│   │   └── compose.yaml.tmpl
 │   ├── go/
 │   │   ├── Dockerfile.tmpl
-│   │   └── compose.yml.tmpl
+│   │   └── compose.yaml.tmpl
 │   └── node/
 │       ├── Dockerfile.tmpl
-│       └── compose.yml.tmpl
+│       └── compose.yaml.tmpl
 │
 ├── go.mod                   # Go's package manifest (like package.json)
 ├── go.sum                   # Lock file (like package-lock.json)
