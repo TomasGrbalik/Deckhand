@@ -68,6 +68,12 @@ func TestComposeDestroy(t *testing.T) {
 
 	comp := docker.NewCompose()
 
+	// Ensure the image is available (may not be cached on a clean runner).
+	pullCmd := exec.Command("docker", "pull", "alpine:latest")
+	if out, err := pullCmd.CombinedOutput(); err != nil {
+		t.Fatalf("pulling alpine: %v\n%s", err, out)
+	}
+
 	if err := comp.Up(dir, composePath, false); err != nil {
 		t.Fatalf("Up() error: %v", err)
 	}

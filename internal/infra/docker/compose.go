@@ -37,8 +37,6 @@ func (c *Compose) Destroy(projectDir, composePath string) error {
 func (c *Compose) run(dir string, args ...string) error {
 	cmd := exec.Command("docker", args...)
 	cmd.Dir = dir
-	cmd.Stdout = nil
-	cmd.Stderr = nil
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {

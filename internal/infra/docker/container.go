@@ -25,8 +25,9 @@ func NewContainer(api client.APIClient) *Container {
 	return &Container{api: api}
 }
 
-// Exec runs a command inside a container. When tty is true, stdin is attached
-// and the terminal is put into raw mode for interactive use.
+// Exec runs a command inside a container, identified by name or ID.
+// When tty is true, stdin is attached and the terminal is put into raw mode
+// for interactive use.
 func (c *Container) Exec(containerName string, cmd []string, tty bool) error {
 	ctx := context.Background()
 
@@ -82,6 +83,10 @@ func (c *Container) execInteractive(ctx context.Context, resp types.HijackedResp
 	if streamErr := <-errCh; streamErr != nil {
 		return fmt.Errorf("exec stream: %w", streamErr)
 	}
+	// Drain the second goroutine so it doesn't leak. resp.Close() (deferred
+	// above) unblocks whichever copy is still in flight, so this returns
+	// promptly.
+	<-errCh
 
 	// Check exit code.
 	inspect, inspectErr := c.api.ContainerExecInspect(ctx, execID)
