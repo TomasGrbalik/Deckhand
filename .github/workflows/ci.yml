@@ -23,11 +23,6 @@ jobs:
             -race -coverprofile=coverage.out -covermode=atomic -coverpkg=./... -count=1 -shuffle=on ./...
       - name: Check coverage threshold
         run: go tool go-test-coverage --config=.testcoverage.yml
-      - name: Upload coverage
-        uses: codecov/codecov-action@v5
-        with:
-          files: coverage.out
-        if: github.event_name == 'pull_request'
 
   lint:
     runs-on: ubuntu-latest
