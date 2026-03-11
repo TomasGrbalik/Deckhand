@@ -2,7 +2,6 @@ package docker_test
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os/exec"
 	"strings"
@@ -17,7 +16,7 @@ import (
 func testContainer(t *testing.T, project, service string) (name string, cleanup func()) {
 	t.Helper()
 
-	name = fmt.Sprintf("deckhand-test-%s-%s-%d", project, service, time.Now().UnixNano())
+	name = "deckhand-test-" + project + "-" + service
 
 	cmd := exec.Command("docker", "run", "-d",
 		"--name", name,
@@ -155,7 +154,7 @@ func TestLogs(t *testing.T) {
 	}
 
 	// Start a container that produces output.
-	name := fmt.Sprintf("deckhand-test-logs-%d", time.Now().UnixNano())
+	name := "deckhand-test-logs"
 	cmd := exec.Command("docker", "run", "-d", "--name", name,
 		"alpine:latest", "sh", "-c", "echo hello-from-logs && sleep infinity")
 	if out, err := cmd.CombinedOutput(); err != nil {

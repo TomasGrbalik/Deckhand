@@ -20,7 +20,10 @@ func TestComposeUpDown(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "deckhand-test-updown")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("creating project dir: %v", err)
+	}
 	composePath := filepath.Join(dir, "docker-compose.yml")
 	if err := os.WriteFile(composePath, []byte(testComposeContent), 0o644); err != nil {
 		t.Fatalf("writing compose file: %v", err)
@@ -60,7 +63,10 @@ func TestComposeDestroy(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "deckhand-test-destroy")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("creating project dir: %v", err)
+	}
 	composePath := filepath.Join(dir, "docker-compose.yml")
 	if err := os.WriteFile(composePath, []byte(testComposeContent), 0o644); err != nil {
 		t.Fatalf("writing compose file: %v", err)
