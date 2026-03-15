@@ -232,6 +232,39 @@ func TestDestroy_MissingDeckhandDir(t *testing.T) {
 	}
 }
 
+func TestDown_ComposeError(t *testing.T) {
+	svc, _, dir := newTestEnv(t)
+
+	// Create .deckhand/ so the compose file exists.
+	if err := svc.Up(false); err != nil {
+		t.Fatalf("Up() error: %v", err)
+	}
+
+	// Re-create with a failing compose runner.
+	source := newFakeSource()
+	compose := &spyCompose{downErr: errors.New("down failed")}
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc = service.NewEnvironmentService(source, compose, project, dir)
+
+	err := svc.Down()
+	if err == nil {
+		t.Fatal("expected error when compose down fails")
+	}
+	if !strings.Contains(err.Error(), "down failed") {
+		t.Errorf("error should contain cause, got: %v", err)
+	}
+}
+
+func TestDown_NoEnvironment(t *testing.T) {
+	svc, _, _ := newTestEnv(t)
+
+	// No prior Up — .deckhand/ doesn't exist.
+	err := svc.Down()
+	if !errors.Is(err, service.ErrNoEnvironment) {
+		t.Fatalf("expected ErrNoEnvironment, got: %v", err)
+	}
+}
+
 func TestUp_TemplateRenderingFails(t *testing.T) {
 	dir := t.TempDir()
 	source := &fakeSource{err: errors.New("template broken")}

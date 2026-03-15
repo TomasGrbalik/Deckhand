@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -80,9 +81,27 @@ func (s *EnvironmentService) Up(build bool) error {
 	return nil
 }
 
+// ErrNoEnvironment is returned when Down or Destroy is called without a prior Up.
+var ErrNoEnvironment = errors.New("no environment found")
+
+// composePath returns the path to the generated compose file and checks it exists.
+func (s *EnvironmentService) composePath() (string, error) {
+	p := filepath.Join(s.projectDir, deckhandDir, "docker-compose.yml")
+	if _, err := os.Stat(p); err != nil {
+		if os.IsNotExist(err) {
+			return "", ErrNoEnvironment
+		}
+		return "", fmt.Errorf("checking compose file: %w", err)
+	}
+	return p, nil
+}
+
 // Down stops containers but leaves the .deckhand/ directory intact.
 func (s *EnvironmentService) Down() error {
-	composePath := filepath.Join(s.projectDir, deckhandDir, "docker-compose.yml")
+	composePath, err := s.composePath()
+	if err != nil {
+		return err
+	}
 	if err := s.compose.Down(s.projectDir, composePath); err != nil {
 		return fmt.Errorf("compose down: %w", err)
 	}
@@ -91,7 +110,13 @@ func (s *EnvironmentService) Down() error {
 
 // Destroy stops containers and removes the .deckhand/ directory.
 func (s *EnvironmentService) Destroy() error {
-	composePath := filepath.Join(s.projectDir, deckhandDir, "docker-compose.yml")
+	composePath, err := s.composePath()
+	if err != nil {
+		if errors.Is(err, ErrNoEnvironment) {
+			return nil // nothing to destroy
+		}
+		return err
+	}
 	if err := s.compose.Destroy(s.projectDir, composePath); err != nil {
 		return fmt.Errorf("compose destroy: %w", err)
 	}
