@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -30,7 +31,7 @@ func newShellCmd() *cobra.Command {
 			}
 			defer cleanup()
 
-			if err := svc.Shell(proj.Name, serviceName, []string{shellCmd}); err != nil {
+			if err := svc.Shell(proj.Name, serviceName, strings.Fields(shellCmd)); err != nil {
 				return fmt.Errorf("shell: %w", err)
 			}
 

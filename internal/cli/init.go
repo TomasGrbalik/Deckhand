@@ -33,7 +33,7 @@ func newInitCmd() *cobra.Command {
 
 			content := fmt.Sprintf("project: %s\ntemplate: %s\n", projectName, templateName)
 
-			if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+			if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil { //nolint:gosec // project config is non-secret, should be readable by team members
 				return fmt.Errorf("writing config: %w", err)
 			}
 

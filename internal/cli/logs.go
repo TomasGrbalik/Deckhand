@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -17,7 +16,7 @@ func newLogsCmd() *cobra.Command {
 		Use:   "logs [service]",
 		Short: "Stream container logs",
 		Args:  cobra.MaximumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			serviceName := "devcontainer"
 			if len(args) > 0 {
 				serviceName = args[0]
@@ -45,7 +44,7 @@ func newLogsCmd() *cobra.Command {
 			}
 			defer rc.Close()
 
-			if _, err := io.Copy(os.Stdout, rc); err != nil {
+			if _, err := io.Copy(cmd.OutOrStdout(), rc); err != nil {
 				return fmt.Errorf("streaming logs: %w", err)
 			}
 
