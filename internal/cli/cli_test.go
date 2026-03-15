@@ -8,7 +8,7 @@ import (
 func TestRootCommandRegistersAllSubcommands(t *testing.T) {
 	root := newRootCmd()
 
-	expected := []string{"init", "up", "down", "destroy", "shell", "exec", "logs", "status", "list", "port"}
+	expected := []string{"init", "up", "down", "destroy", "shell", "exec", "logs", "status", "list", "port", "connect"}
 	registered := make(map[string]bool)
 	for _, sub := range root.Commands() {
 		registered[sub.Name()] = true
@@ -38,7 +38,7 @@ func TestRootCommandHelp(t *testing.T) {
 }
 
 func TestSubcommandHelp(t *testing.T) {
-	commands := []string{"init", "up", "down", "destroy", "shell", "exec", "logs", "status", "list", "port"}
+	commands := []string{"init", "up", "down", "destroy", "shell", "exec", "logs", "status", "list", "port", "connect"}
 
 	for _, name := range commands {
 		t.Run(name, func(t *testing.T) {
@@ -190,6 +190,22 @@ func TestPortAddFlags(t *testing.T) {
 		if !bytes.Contains([]byte(output), []byte(flag)) {
 			t.Errorf("port add help missing flag %s", flag)
 		}
+	}
+}
+
+func TestConnectFlags(t *testing.T) {
+	root := newRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetArgs([]string{"connect", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("connect --help: %v", err)
+	}
+
+	output := buf.String()
+	if !bytes.Contains([]byte(output), []byte("--host")) {
+		t.Error("connect help missing --host flag")
 	}
 }
 
