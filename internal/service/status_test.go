@@ -40,7 +40,7 @@ func TestProjectStatus(t *testing.T) {
 			State:   "running",
 			Status:  "Up 2 hours",
 			Created: time.Now().Add(-2 * time.Hour),
-			Ports:   []int{8080},
+			Ports:   []domain.ContainerPort{{Public: 8080, Private: 8080}},
 		},
 	}
 

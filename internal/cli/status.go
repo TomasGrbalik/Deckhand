@@ -7,6 +7,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+
+	"github.com/TomasGrbalik/deckhand/internal/domain"
 )
 
 func newStatusCmd() *cobra.Command {
@@ -54,19 +56,32 @@ func newStatusCmd() *cobra.Command {
 			fmt.Fprintf(out, "PROJECT: %s (%s)\n\n", proj.Name, projectState)
 
 			w := tabwriter.NewWriter(out, 0, 0, 3, ' ', 0)
-			fmt.Fprintln(w, "SERVICE\tIMAGE\tSTATUS\tPORTS")
+			fmt.Fprintln(w, "SERVICE\tIMAGE\tSTATUS\tHEALTH\tPORTS")
 			for _, c := range containers {
-				ports := "—"
-				if len(c.Ports) > 0 {
-					portStrs := make([]string, len(c.Ports))
-					for i, p := range c.Ports {
-						portStrs[i] = strconv.Itoa(p)
-					}
-					ports = strings.Join(portStrs, ", ")
+				health := c.Health
+				if health == "" {
+					health = "—"
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", c.Service, c.Image, c.Status, ports)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", c.Service, c.Image, c.Status, health, formatPorts(c.Ports))
 			}
 			return w.Flush()
 		},
 	}
+}
+
+// formatPorts renders port mappings. Shows just the public port when
+// public == private, and public:private when they differ.
+func formatPorts(ports []domain.ContainerPort) string {
+	if len(ports) == 0 {
+		return "—"
+	}
+	strs := make([]string, len(ports))
+	for i, p := range ports {
+		if p.Public == p.Private {
+			strs[i] = strconv.Itoa(p.Public)
+		} else {
+			strs[i] = strconv.Itoa(p.Public) + ":" + strconv.Itoa(p.Private)
+		}
+	}
+	return strings.Join(strs, ", ")
 }

@@ -12,9 +12,27 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"golang.org/x/term"
-
-	"github.com/TomasGrbalik/deckhand/internal/domain"
 )
+
+// ContainerInfo holds container metadata returned by listing operations.
+// This is an infra-layer type — the service layer maps it to domain.Container.
+type ContainerInfo struct {
+	ID      string
+	Name    string
+	Service string
+	Project string
+	Image   string
+	State   string
+	Status  string
+	Created time.Time
+	Ports   []PortInfo
+}
+
+// PortInfo represents a port mapping on a running container.
+type PortInfo struct {
+	Public  int
+	Private int
+}
 
 // Container uses the Docker SDK for container-level operations
 // (exec, logs, find). The SDK is needed here for proper TTY handling
@@ -141,7 +159,7 @@ func (c *Container) FindContainer(projectName, serviceName string) (string, erro
 }
 
 // ListByProject returns all deckhand-managed containers for a specific project.
-func (c *Container) ListByProject(projectName string) ([]domain.Container, error) {
+func (c *Container) ListByProject(projectName string) ([]ContainerInfo, error) {
 	f := filters.NewArgs(
 		filters.Arg("label", "dev.deckhand.managed=true"),
 		filters.Arg("label", "dev.deckhand.project="+projectName),
@@ -150,14 +168,14 @@ func (c *Container) ListByProject(projectName string) ([]domain.Container, error
 }
 
 // ListAll returns all deckhand-managed containers across all projects.
-func (c *Container) ListAll() ([]domain.Container, error) {
+func (c *Container) ListAll() ([]ContainerInfo, error) {
 	f := filters.NewArgs(
 		filters.Arg("label", "dev.deckhand.managed=true"),
 	)
 	return c.listContainers(f)
 }
 
-func (c *Container) listContainers(f filters.Args) ([]domain.Container, error) {
+func (c *Container) listContainers(f filters.Args) ([]ContainerInfo, error) {
 	ctx := context.Background()
 
 	// Include stopped containers so list/status show everything.
@@ -169,12 +187,15 @@ func (c *Container) listContainers(f filters.Args) ([]domain.Container, error) {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 
-	result := make([]domain.Container, 0, len(summaries))
+	result := make([]ContainerInfo, 0, len(summaries))
 	for _, s := range summaries {
-		var ports []int
+		var ports []PortInfo
 		for _, p := range s.Ports {
 			if p.PublicPort != 0 {
-				ports = append(ports, int(p.PublicPort))
+				ports = append(ports, PortInfo{
+					Public:  int(p.PublicPort),
+					Private: int(p.PrivatePort),
+				})
 			}
 		}
 
@@ -187,7 +208,7 @@ func (c *Container) listContainers(f filters.Args) ([]domain.Container, error) {
 			}
 		}
 
-		result = append(result, domain.Container{
+		result = append(result, ContainerInfo{
 			ID:      s.ID,
 			Name:    name,
 			Service: s.Labels["dev.deckhand.service"],

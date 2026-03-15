@@ -6,7 +6,8 @@ import (
 	"github.com/TomasGrbalik/deckhand/internal/domain"
 )
 
-// ContainerLister queries Docker for deckhand-managed containers.
+// ContainerLister queries for deckhand-managed containers.
+// The infra layer provides the raw data; an adapter maps it to domain types.
 type ContainerLister interface {
 	ListByProject(projectName string) ([]domain.Container, error)
 	ListAll() ([]domain.Container, error)
