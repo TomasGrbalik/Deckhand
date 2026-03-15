@@ -31,7 +31,6 @@ research/                Research docs (reference only, not part of the tool)
 - `charmbracelet/huh` — Interactive prompts
 - `knadh/koanf` — Config (not Viper)
 - `docker/docker/client` — Docker SDK
-- `compose-spec/compose-go` — Compose file generation
 - `golang.org/x/term` — TTY handling for shell/exec
 
 ## Testing
@@ -45,7 +44,7 @@ research/                Research docs (reference only, not part of the tool)
 
 ## Implementation Phases
 
-See `design/phases/` for full details. Current phase: **Phase 1 — Skeleton & Core Lifecycle**.
+See `design/phases/` for full details. **Phase 1 — Skeleton & Core Lifecycle** is complete. Next: **Phase 2**.
 
 ## Conventions
 

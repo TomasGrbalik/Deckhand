@@ -1,6 +1,6 @@
 # Phase 1: Skeleton & Core Lifecycle
 
-**Status:** Active
+**Status:** Complete
 
 **Goal:** You can `deckhand up` a hardcoded dev container, `deckhand shell` into it, and `deckhand down` to stop it. The tool exists, builds, and does something real.
 
