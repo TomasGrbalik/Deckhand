@@ -51,6 +51,64 @@ func newContainerService() (*service.ContainerService, func(), error) {
 	return service.NewContainerService(docker.NewContainer(client.API())), cleanup, nil
 }
 
+// newStatusService creates a StatusService wired to a real Docker client.
+func newStatusService() (*service.StatusService, func(), error) {
+	client, err := docker.NewClient()
+	if err != nil {
+		return nil, nil, fmt.Errorf("connecting to docker: %w", err)
+	}
+	cleanup := func() { _ = client.Close() }
+	adapter := &containerListerAdapter{ctr: docker.NewContainer(client.API())}
+	return service.NewStatusService(adapter), cleanup, nil
+}
+
+// containerListerAdapter adapts docker.Container (infra) to service.ContainerLister
+// by mapping docker.ContainerInfo to domain.Container. This keeps infra free of
+// domain imports.
+type containerListerAdapter struct {
+	ctr *docker.Container
+}
+
+// ListByProject implements service.ContainerLister.
+func (a *containerListerAdapter) ListByProject(projectName string) ([]domain.Container, error) {
+	infos, err := a.ctr.ListByProject(projectName)
+	if err != nil {
+		return nil, err
+	}
+	return mapContainerInfos(infos), nil
+}
+
+// ListAll implements service.ContainerLister.
+func (a *containerListerAdapter) ListAll() ([]domain.Container, error) {
+	infos, err := a.ctr.ListAll()
+	if err != nil {
+		return nil, err
+	}
+	return mapContainerInfos(infos), nil
+}
+
+func mapContainerInfos(infos []docker.ContainerInfo) []domain.Container {
+	result := make([]domain.Container, len(infos))
+	for i, info := range infos {
+		ports := make([]domain.ContainerPort, len(info.Ports))
+		for j, p := range info.Ports {
+			ports[j] = domain.ContainerPort{Public: p.Public, Private: p.Private}
+		}
+		result[i] = domain.Container{
+			ID:      info.ID,
+			Name:    info.Name,
+			Service: info.Service,
+			Project: info.Project,
+			Image:   info.Image,
+			State:   info.State,
+			Status:  info.Status,
+			Created: info.Created,
+			Ports:   ports,
+		}
+	}
+	return result
+}
+
 // dirName returns the base name of the given directory path.
 func dirName(dir string) string {
 	return filepath.Base(dir)

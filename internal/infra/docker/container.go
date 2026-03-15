@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -12,6 +13,26 @@ import (
 	"github.com/docker/docker/client"
 	"golang.org/x/term"
 )
+
+// ContainerInfo holds container metadata returned by listing operations.
+// This is an infra-layer type — the service layer maps it to domain.Container.
+type ContainerInfo struct {
+	ID      string
+	Name    string
+	Service string
+	Project string
+	Image   string
+	State   string
+	Status  string
+	Created time.Time
+	Ports   []PortInfo
+}
+
+// PortInfo represents a port mapping on a running container.
+type PortInfo struct {
+	Public  int
+	Private int
+}
 
 // Container uses the Docker SDK for container-level operations
 // (exec, logs, find). The SDK is needed here for proper TTY handling
@@ -135,4 +156,70 @@ func (c *Container) FindContainer(projectName, serviceName string) (string, erro
 	}
 
 	return containers[0].ID, nil
+}
+
+// ListByProject returns all deckhand-managed containers for a specific project.
+func (c *Container) ListByProject(projectName string) ([]ContainerInfo, error) {
+	f := filters.NewArgs(
+		filters.Arg("label", "dev.deckhand.managed=true"),
+		filters.Arg("label", "dev.deckhand.project="+projectName),
+	)
+	return c.listContainers(f)
+}
+
+// ListAll returns all deckhand-managed containers across all projects.
+func (c *Container) ListAll() ([]ContainerInfo, error) {
+	f := filters.NewArgs(
+		filters.Arg("label", "dev.deckhand.managed=true"),
+	)
+	return c.listContainers(f)
+}
+
+func (c *Container) listContainers(f filters.Args) ([]ContainerInfo, error) {
+	ctx := context.Background()
+
+	// Include stopped containers so list/status show everything.
+	summaries, err := c.api.ContainerList(ctx, container.ListOptions{
+		Filters: f,
+		All:     true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+
+	result := make([]ContainerInfo, 0, len(summaries))
+	for _, s := range summaries {
+		var ports []PortInfo
+		for _, p := range s.Ports {
+			if p.PublicPort != 0 {
+				ports = append(ports, PortInfo{
+					Public:  int(p.PublicPort),
+					Private: int(p.PrivatePort),
+				})
+			}
+		}
+
+		name := ""
+		if len(s.Names) > 0 {
+			// Docker prepends "/" to container names.
+			name = s.Names[0]
+			if len(name) > 0 && name[0] == '/' {
+				name = name[1:]
+			}
+		}
+
+		result = append(result, ContainerInfo{
+			ID:      s.ID,
+			Name:    name,
+			Service: s.Labels["dev.deckhand.service"],
+			Project: s.Labels["dev.deckhand.project"],
+			Image:   s.Image,
+			State:   s.State,
+			Status:  s.Status,
+			Created: time.Unix(s.Created, 0),
+			Ports:   ports,
+		})
+	}
+
+	return result, nil
 }

@@ -8,7 +8,7 @@ import (
 func TestRootCommandRegistersAllSubcommands(t *testing.T) {
 	root := newRootCmd()
 
-	expected := []string{"init", "up", "down", "destroy", "shell", "exec", "logs"}
+	expected := []string{"init", "up", "down", "destroy", "shell", "exec", "logs", "status", "list"}
 	registered := make(map[string]bool)
 	for _, sub := range root.Commands() {
 		registered[sub.Name()] = true
@@ -38,7 +38,7 @@ func TestRootCommandHelp(t *testing.T) {
 }
 
 func TestSubcommandHelp(t *testing.T) {
-	commands := []string{"init", "up", "down", "destroy", "shell", "exec", "logs"}
+	commands := []string{"init", "up", "down", "destroy", "shell", "exec", "logs", "status", "list"}
 
 	for _, name := range commands {
 		t.Run(name, func(t *testing.T) {

@@ -7,6 +7,7 @@ services:
       context: ..
       dockerfile: .deckhand/Dockerfile
     labels:
+      dev.deckhand.managed: "true"
       dev.deckhand.project: "{{ .Name }}"
       dev.deckhand.service: "devcontainer"
     volumes:
