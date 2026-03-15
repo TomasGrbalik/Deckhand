@@ -66,7 +66,6 @@ func (c *Container) execInteractive(_ context.Context, resp types.HijackedRespon
 	defer func() { _ = term.Restore(fd, oldState) }()
 
 	outputDone := make(chan error, 1)
-	inputDone := make(chan error, 1)
 
 	// Copy container output to stdout.
 	go func() {
@@ -74,19 +73,16 @@ func (c *Container) execInteractive(_ context.Context, resp types.HijackedRespon
 		outputDone <- copyErr
 	}()
 
-	// Copy stdin to container.
+	// Copy stdin to container. This goroutine will block on os.Stdin.Read()
+	// after the shell exits — there's no way to unblock it without closing
+	// stdin itself. Following the Docker CLI's approach, we don't wait for
+	// it; resp.Close() in the caller's defer will clean up the write side.
 	go func() {
-		_, copyErr := io.Copy(resp.Conn, os.Stdin)
-		inputDone <- copyErr
+		_, _ = io.Copy(resp.Conn, os.Stdin)
 	}()
 
-	// Wait for the output goroutine to finish (container command exited),
-	// then close the connection to unblock the stdin goroutine.
-	outputErr := <-outputDone
-	resp.Close()
-	<-inputDone
-
-	if outputErr != nil {
+	// Wait only for output to finish (shell exited), then return.
+	if outputErr := <-outputDone; outputErr != nil {
 		return fmt.Errorf("exec stream: %w", outputErr)
 	}
 
