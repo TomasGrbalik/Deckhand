@@ -29,6 +29,7 @@ func newRootCmd() *cobra.Command {
 		newLogsCmd(),
 		newStatusCmd(),
 		newListCmd(),
+		newPortCmd(),
 	)
 
 	return cmd

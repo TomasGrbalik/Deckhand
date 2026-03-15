@@ -8,7 +8,7 @@ import (
 func TestRootCommandRegistersAllSubcommands(t *testing.T) {
 	root := newRootCmd()
 
-	expected := []string{"init", "up", "down", "destroy", "shell", "exec", "logs", "status", "list"}
+	expected := []string{"init", "up", "down", "destroy", "shell", "exec", "logs", "status", "list", "port"}
 	registered := make(map[string]bool)
 	for _, sub := range root.Commands() {
 		registered[sub.Name()] = true
@@ -38,7 +38,7 @@ func TestRootCommandHelp(t *testing.T) {
 }
 
 func TestSubcommandHelp(t *testing.T) {
-	commands := []string{"init", "up", "down", "destroy", "shell", "exec", "logs", "status", "list"}
+	commands := []string{"init", "up", "down", "destroy", "shell", "exec", "logs", "status", "list", "port"}
 
 	for _, name := range commands {
 		t.Run(name, func(t *testing.T) {
@@ -153,6 +153,43 @@ func TestGlobalVerboseFlag(t *testing.T) {
 	}
 	if f.Shorthand != "v" {
 		t.Errorf("--verbose shorthand = %q, want %q", f.Shorthand, "v")
+	}
+}
+
+func TestPortSubcommands(t *testing.T) {
+	root := newRootCmd()
+	portCmd, _, err := root.Find([]string{"port"})
+	if err != nil {
+		t.Fatalf("port command not found: %v", err)
+	}
+
+	subcommands := make(map[string]bool)
+	for _, sub := range portCmd.Commands() {
+		subcommands[sub.Name()] = true
+	}
+
+	for _, name := range []string{"list", "add", "remove"} {
+		if !subcommands[name] {
+			t.Errorf("port subcommand %q not registered", name)
+		}
+	}
+}
+
+func TestPortAddFlags(t *testing.T) {
+	root := newRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetArgs([]string{"port", "add", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("port add --help: %v", err)
+	}
+
+	output := buf.String()
+	for _, flag := range []string{"--name", "--protocol"} {
+		if !bytes.Contains([]byte(output), []byte(flag)) {
+			t.Errorf("port add help missing flag %s", flag)
+		}
 	}
 }
 
