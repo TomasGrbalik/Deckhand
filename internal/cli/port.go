@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/TomasGrbalik/deckhand/internal/config"
+	"github.com/TomasGrbalik/deckhand/internal/domain"
 	"github.com/TomasGrbalik/deckhand/internal/service"
 )
 
@@ -41,7 +42,8 @@ func newPortListCmd() *cobra.Command {
 				return err
 			}
 
-			svc := service.NewPortService(proj)
+			// List is read-only — no config writer or env recreator needed.
+			svc := service.NewPortService(proj, "", nil, nil)
 			ports := svc.List()
 
 			out := cmd.OutOrStdout()
@@ -93,20 +95,9 @@ func newPortAddCmd() *cobra.Command {
 				return err
 			}
 
-			svc := service.NewPortService(proj)
+			svc := newPortService(proj, dir)
 			if err := svc.Add(port, name, protocol); err != nil {
 				return err
-			}
-
-			cfgPath := config.ProjectConfigPath(dir)
-			if err := config.Save(cfgPath, proj); err != nil {
-				return fmt.Errorf("saving config: %w", err)
-			}
-
-			// Re-render and recreate containers.
-			envSvc := newEnvironmentService(*proj, dir)
-			if err := envSvc.Up(false); err != nil {
-				return fmt.Errorf("recreating environment: %w", err)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Added port %d.\n", port)
@@ -141,24 +132,29 @@ func newPortRemoveCmd() *cobra.Command {
 				return err
 			}
 
-			svc := service.NewPortService(proj)
+			svc := newPortService(proj, dir)
 			if err := svc.Remove(port); err != nil {
 				return err
-			}
-
-			cfgPath := config.ProjectConfigPath(dir)
-			if err := config.Save(cfgPath, proj); err != nil {
-				return fmt.Errorf("saving config: %w", err)
-			}
-
-			// Re-render and recreate containers.
-			envSvc := newEnvironmentService(*proj, dir)
-			if err := envSvc.Up(false); err != nil {
-				return fmt.Errorf("recreating environment: %w", err)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Removed port %d.\n", port)
 			return nil
 		},
 	}
+}
+
+// newPortService creates a PortService wired to real config persistence
+// and environment recreation.
+func newPortService(proj *domain.Project, dir string) *service.PortService {
+	cfgPath := config.ProjectConfigPath(dir)
+	envSvc := newEnvironmentService(*proj, dir)
+	return service.NewPortService(proj, cfgPath, configSaver{}, envSvc)
+}
+
+// configSaver implements service.ConfigWriter using config.Save.
+type configSaver struct{}
+
+// Save implements service.ConfigWriter.
+func (configSaver) Save(path string, proj *domain.Project) error {
+	return config.Save(path, proj)
 }
