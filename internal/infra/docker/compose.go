@@ -1,7 +1,10 @@
 package docker
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 )
 
@@ -38,9 +41,14 @@ func (c *Compose) run(dir string, args ...string) error {
 	cmd := exec.Command("docker", args...)
 	cmd.Dir = dir
 
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("docker %v: %w\n%s", args, err, out)
+	// Capture stderr for error reporting while also streaming it to the
+	// user so they can see build progress in real time.
+	var stderrBuf bytes.Buffer
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker %v: %w\n%s", args, err, stderrBuf.String())
 	}
 	return nil
 }

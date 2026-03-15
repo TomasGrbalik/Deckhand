@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -g 1000 dev && \
-    useradd -m -u 1000 -g dev dev
+RUN groupadd -f -g 1000 dev && \
+    useradd -m -u 1000 -g dev -o dev
 
 WORKDIR /workspace
 

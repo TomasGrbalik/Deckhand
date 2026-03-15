@@ -6,6 +6,16 @@ import (
 	"github.com/TomasGrbalik/deckhand/templates"
 )
 
+// EmbeddedSource loads templates from the embedded filesystem.
+// It implements service.TemplateSource.
+type EmbeddedSource struct{}
+
+// Load reads the raw Dockerfile and compose template strings for the given
+// template name from the embedded filesystem.
+func (e *EmbeddedSource) Load(name string) (dockerfile string, compose string, err error) {
+	return Load(name)
+}
+
 // Load reads the raw Dockerfile and compose template strings for the given
 // template name from the embedded filesystem. It does not render them —
 // rendering is the responsibility of the service layer (#5).

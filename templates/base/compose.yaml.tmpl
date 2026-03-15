@@ -6,6 +6,9 @@ services:
     build:
       context: ..
       dockerfile: .deckhand/Dockerfile
+    labels:
+      dev.deckhand.project: "{{ .Name }}"
+      dev.deckhand.service: "devcontainer"
     volumes:
       - ..:/workspace
 {{- if .ExposedPorts }}
