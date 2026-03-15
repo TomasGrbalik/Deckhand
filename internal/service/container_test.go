@@ -64,7 +64,7 @@ func newTestContainer(t *testing.T) (*service.ContainerService, *spyRunner) {
 func TestShell_FindsContainerAndExecsWithTTY(t *testing.T) {
 	svc, runner := newTestContainer(t)
 
-	if err := svc.Shell("myapp", "devcontainer", "zsh"); err != nil {
+	if err := svc.Shell("myapp", "devcontainer", []string{"zsh"}); err != nil {
 		t.Fatalf("Shell() error: %v", err)
 	}
 
@@ -99,15 +99,16 @@ func TestShell_FindsContainerAndExecsWithTTY(t *testing.T) {
 func TestShell_CustomCommand(t *testing.T) {
 	svc, runner := newTestContainer(t)
 
-	if err := svc.Shell("myapp", "devcontainer", "bash"); err != nil {
+	if err := svc.Shell("myapp", "devcontainer", []string{"bash", "-l"}); err != nil {
 		t.Fatalf("Shell() error: %v", err)
 	}
 
 	if len(runner.execCalls) != 1 {
 		t.Fatalf("expected 1 Exec call, got %d", len(runner.execCalls))
 	}
-	if runner.execCalls[0].cmd[0] != "bash" {
-		t.Errorf("Exec cmd = %v, want [bash]", runner.execCalls[0].cmd)
+	ec := runner.execCalls[0]
+	if len(ec.cmd) != 2 || ec.cmd[0] != "bash" || ec.cmd[1] != "-l" {
+		t.Errorf("Exec cmd = %v, want [bash -l]", ec.cmd)
 	}
 }
 
@@ -186,7 +187,7 @@ func TestShell_ContainerNotFound(t *testing.T) {
 	runner.findResult = ""
 	runner.findErr = errors.New("container not found for project \"myapp\" service \"devcontainer\"")
 
-	err := svc.Shell("myapp", "devcontainer", "zsh")
+	err := svc.Shell("myapp", "devcontainer", []string{"zsh"})
 	if err == nil {
 		t.Fatal("expected error when container not found")
 	}
@@ -237,7 +238,7 @@ func TestShell_ExecFails(t *testing.T) {
 	svc, runner := newTestContainer(t)
 	runner.execErr = errors.New("exec failed")
 
-	err := svc.Shell("myapp", "devcontainer", "zsh")
+	err := svc.Shell("myapp", "devcontainer", []string{"zsh"})
 	if err == nil {
 		t.Fatal("expected error when exec fails")
 	}

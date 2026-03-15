@@ -27,15 +27,16 @@ func NewContainerService(runner ContainerRunner) *ContainerService {
 }
 
 // Shell opens an interactive shell in the container for the given project
-// and service. The cmd parameter is the shell command to run (e.g. "zsh").
-// No defaulting is done here — the CLI layer chooses the default shell.
-func (s *ContainerService) Shell(project, service, cmd string) error {
+// and service. The cmd parameter is the shell command and any args
+// (e.g. []string{"bash", "-l"}). No defaulting is done here — the CLI
+// layer chooses the default shell.
+func (s *ContainerService) Shell(project, service string, cmd []string) error {
 	containerID, err := s.runner.FindContainer(project, service)
 	if err != nil {
 		return fmt.Errorf("finding container: %w", err)
 	}
 
-	if err := s.runner.Exec(containerID, []string{cmd}, true); err != nil {
+	if err := s.runner.Exec(containerID, cmd, true); err != nil {
 		return fmt.Errorf("shell exec: %w", err)
 	}
 
