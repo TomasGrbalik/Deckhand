@@ -22,6 +22,7 @@ func testContainer(t *testing.T, project, service string) (name string, cleanup 
 
 	cmd := exec.Command("docker", "run", "-d",
 		"--name", name,
+		"--label", "dev.deckhand.managed=true",
 		"--label", "dev.deckhand.project="+project,
 		"--label", "dev.deckhand.service="+service,
 		"alpine:latest", "sleep", "infinity",
@@ -147,6 +148,101 @@ func TestLogsContainerNotFound(t *testing.T) {
 	_, err = ctr.Logs("nonexistent-container-xyz", false, "10")
 	if err == nil {
 		t.Fatal("expected error for nonexistent container")
+	}
+}
+
+func TestListByProject(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	_, cleanup := testContainer(t, "testlist", "devcontainer")
+	defer cleanup()
+
+	cli, err := docker.NewClient()
+	if err != nil {
+		t.Fatalf("NewClient(): %v", err)
+	}
+	defer cli.Close()
+
+	ctr := docker.NewContainer(cli.API())
+	containers, err := ctr.ListByProject("testlist")
+	if err != nil {
+		t.Fatalf("ListByProject() error: %v", err)
+	}
+
+	if len(containers) == 0 {
+		t.Fatal("expected at least 1 container")
+	}
+
+	c := containers[0]
+	if c.Project != "testlist" {
+		t.Errorf("Project = %q, want %q", c.Project, "testlist")
+	}
+	if c.Service != "devcontainer" {
+		t.Errorf("Service = %q, want %q", c.Service, "devcontainer")
+	}
+	if c.State != "running" {
+		t.Errorf("State = %q, want %q", c.State, "running")
+	}
+	if c.Image != "alpine:latest" {
+		t.Errorf("Image = %q, want %q", c.Image, "alpine:latest")
+	}
+}
+
+func TestListByProjectEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	cli, err := docker.NewClient()
+	if err != nil {
+		t.Fatalf("NewClient(): %v", err)
+	}
+	defer cli.Close()
+
+	ctr := docker.NewContainer(cli.API())
+	containers, err := ctr.ListByProject("nonexistent-project-xyz")
+	if err != nil {
+		t.Fatalf("ListByProject() error: %v", err)
+	}
+	if len(containers) != 0 {
+		t.Errorf("expected 0 containers, got %d", len(containers))
+	}
+}
+
+func TestListAll(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	_, cleanup1 := testContainer(t, "testall-a", "devcontainer")
+	defer cleanup1()
+	_, cleanup2 := testContainer(t, "testall-b", "devcontainer")
+	defer cleanup2()
+
+	cli, err := docker.NewClient()
+	if err != nil {
+		t.Fatalf("NewClient(): %v", err)
+	}
+	defer cli.Close()
+
+	ctr := docker.NewContainer(cli.API())
+	containers, err := ctr.ListAll()
+	if err != nil {
+		t.Fatalf("ListAll() error: %v", err)
+	}
+
+	// Should find at least our two test containers.
+	projects := make(map[string]bool)
+	for _, c := range containers {
+		projects[c.Project] = true
+	}
+	if !projects["testall-a"] {
+		t.Error("ListAll() missing project testall-a")
+	}
+	if !projects["testall-b"] {
+		t.Error("ListAll() missing project testall-b")
 	}
 }
 
