@@ -17,6 +17,8 @@ func testContainer(t *testing.T, project, service string) (name string, cleanup 
 	t.Helper()
 
 	name = "deckhand-test-" + project + "-" + service
+	// Remove any leftover container from a previous run.
+	_ = exec.Command("docker", "rm", "-f", name).Run()
 
 	cmd := exec.Command("docker", "run", "-d",
 		"--name", name,
@@ -155,6 +157,8 @@ func TestLogs(t *testing.T) {
 
 	// Start a container that produces output.
 	name := "deckhand-test-logs"
+	// Remove any leftover container from a previous run.
+	_ = exec.Command("docker", "rm", "-f", name).Run()
 	cmd := exec.Command("docker", "run", "-d", "--name", name,
 		"alpine:latest", "sh", "-c", "echo hello-from-logs && sleep infinity")
 	if out, err := cmd.CombinedOutput(); err != nil {
