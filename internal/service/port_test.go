@@ -88,6 +88,27 @@ func TestPortRemove(t *testing.T) {
 	}
 }
 
+func TestPortAddInvalidPort(t *testing.T) {
+	proj := &domain.Project{}
+	svc := service.NewPortService(proj)
+
+	for _, port := range []int{0, -1, 65536, 99999} {
+		if err := svc.Add(port, "", "http"); err == nil {
+			t.Errorf("expected error for port %d", port)
+		}
+	}
+}
+
+func TestPortAddInvalidProtocol(t *testing.T) {
+	proj := &domain.Project{}
+	svc := service.NewPortService(proj)
+
+	err := svc.Add(3000, "", "banana")
+	if err == nil {
+		t.Fatal("expected error for invalid protocol")
+	}
+}
+
 func TestPortRemoveNotFound(t *testing.T) {
 	proj := &domain.Project{}
 	svc := service.NewPortService(proj)
