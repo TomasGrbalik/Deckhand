@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/TomasGrbalik/deckhand/internal/config"
+	"github.com/TomasGrbalik/deckhand/internal/domain"
 )
 
 func TestLoad_ValidConfig(t *testing.T) {
@@ -85,6 +86,46 @@ func TestLoad_InvalidYAML(t *testing.T) {
 	_, err := config.Load(cfgPath)
 	if err == nil {
 		t.Fatal("Load() should return error for invalid YAML")
+	}
+}
+
+func TestSave_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	original := &domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		Ports: []domain.PortMapping{
+			{Port: 8080, Name: "web", Protocol: "http"},
+			{Port: 5432, Name: "pg", Protocol: "tcp", Internal: true},
+		},
+		Env: map[string]string{"GO_ENV": "dev"},
+	}
+
+	if err := config.Save(cfgPath, original); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+
+	loaded, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() after Save() error: %v", err)
+	}
+
+	if loaded.Name != original.Name {
+		t.Errorf("Name = %q, want %q", loaded.Name, original.Name)
+	}
+	if len(loaded.Ports) != 2 {
+		t.Fatalf("len(Ports) = %d, want 2", len(loaded.Ports))
+	}
+	if loaded.Ports[0].Port != 8080 {
+		t.Errorf("Ports[0].Port = %d, want 8080", loaded.Ports[0].Port)
+	}
+	if loaded.Ports[1].Internal != true {
+		t.Errorf("Ports[1].Internal = %v, want true", loaded.Ports[1].Internal)
+	}
+	if loaded.Env["GO_ENV"] != "dev" {
+		t.Errorf("Env[GO_ENV] = %q, want %q", loaded.Env["GO_ENV"], "dev")
 	}
 }
 
