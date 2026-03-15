@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -16,10 +15,6 @@ func newConnectCmd() *cobra.Command {
 		Use:   "connect",
 		Short: "Print the SSH tunnel command for this project's ports",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if host == "" {
-				return errors.New("--host is required (e.g. --host user@myserver)")
-			}
-
 			dir, err := projectDir()
 			if err != nil {
 				return err
@@ -51,6 +46,7 @@ func newConnectCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&host, "host", "", "SSH target (e.g. user@myserver)")
+	_ = cmd.MarkFlagRequired("host")
 
 	return cmd
 }
