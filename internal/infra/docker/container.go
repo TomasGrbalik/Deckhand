@@ -56,7 +56,7 @@ func (c *Container) Exec(containerName string, cmd []string, tty bool) error {
 	return c.execNonInteractive(resp)
 }
 
-func (c *Container) execInteractive(ctx context.Context, resp types.HijackedResponse, execID string) error {
+func (c *Container) execInteractive(_ context.Context, resp types.HijackedResponse, _ string) error {
 	//nolint:gosec // Fd() returns uintptr; converting to int is safe for terminal FDs on all supported platforms.
 	fd := int(os.Stdin.Fd())
 	oldState, termErr := term.MakeRaw(fd)
@@ -65,37 +65,31 @@ func (c *Container) execInteractive(ctx context.Context, resp types.HijackedResp
 	}
 	defer func() { _ = term.Restore(fd, oldState) }()
 
-	errCh := make(chan error, 2)
+	outputDone := make(chan error, 1)
+	inputDone := make(chan error, 1)
 
 	// Copy container output to stdout.
 	go func() {
 		_, copyErr := io.Copy(os.Stdout, resp.Reader)
-		errCh <- copyErr
+		outputDone <- copyErr
 	}()
 
 	// Copy stdin to container.
 	go func() {
 		_, copyErr := io.Copy(resp.Conn, os.Stdin)
-		errCh <- copyErr
+		inputDone <- copyErr
 	}()
 
-	// Wait for the output goroutine to finish (container command exited).
-	if streamErr := <-errCh; streamErr != nil {
-		return fmt.Errorf("exec stream: %w", streamErr)
-	}
-	// Drain the second goroutine so it doesn't leak. resp.Close() (deferred
-	// above) unblocks whichever copy is still in flight, so this returns
-	// promptly.
-	<-errCh
+	// Wait for the output goroutine to finish (container command exited),
+	// then close the connection to unblock the stdin goroutine.
+	outputErr := <-outputDone
+	resp.Close()
+	<-inputDone
 
-	// Check exit code.
-	inspect, inspectErr := c.api.ContainerExecInspect(ctx, execID)
-	if inspectErr != nil {
-		return fmt.Errorf("inspecting exec result: %w", inspectErr)
+	if outputErr != nil {
+		return fmt.Errorf("exec stream: %w", outputErr)
 	}
-	if inspect.ExitCode != 0 {
-		return fmt.Errorf("exec exited with code %d", inspect.ExitCode)
-	}
+
 	return nil
 }
 
