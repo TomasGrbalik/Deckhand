@@ -28,8 +28,8 @@ func NewContainerService(runner ContainerRunner) *ContainerService {
 
 // Shell opens an interactive shell in the container for the given project
 // and service. The cmd parameter is the shell command and any args
-// (e.g. []string{"bash", "-l"}). No defaulting is done here — the CLI
-// layer chooses the default shell.
+// (e.g. []string{"bash", "-l"}). No defaulting is done here — the caller
+// provides the shell to use.
 func (s *ContainerService) Shell(project, service string, cmd []string) error {
 	containerID, err := s.runner.FindContainer(project, service)
 	if err != nil {
@@ -44,7 +44,7 @@ func (s *ContainerService) Shell(project, service string, cmd []string) error {
 }
 
 // Exec runs a command (without TTY) in the container for the given project
-// and service. No defaulting is done here — the CLI layer provides the command.
+// and service.
 func (s *ContainerService) Exec(project, service string, cmd []string) error {
 	containerID, err := s.runner.FindContainer(project, service)
 	if err != nil {
@@ -59,8 +59,7 @@ func (s *ContainerService) Exec(project, service string, cmd []string) error {
 }
 
 // Logs returns a reader streaming the container's logs. The caller is
-// responsible for closing the returned reader. No stdout writing is done
-// here — the CLI or TUI handles output.
+// responsible for closing the returned reader.
 func (s *ContainerService) Logs(project, service string, follow bool, tail string) (io.ReadCloser, error) {
 	containerID, err := s.runner.FindContainer(project, service)
 	if err != nil {
