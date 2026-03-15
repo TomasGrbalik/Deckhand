@@ -51,6 +51,16 @@ func newContainerService() (*service.ContainerService, func(), error) {
 	return service.NewContainerService(docker.NewContainer(client.API())), cleanup, nil
 }
 
+// newStatusService creates a StatusService wired to a real Docker client.
+func newStatusService() (*service.StatusService, func(), error) {
+	client, err := docker.NewClient()
+	if err != nil {
+		return nil, nil, fmt.Errorf("connecting to docker: %w", err)
+	}
+	cleanup := func() { _ = client.Close() }
+	return service.NewStatusService(docker.NewContainer(client.API())), cleanup, nil
+}
+
 // dirName returns the base name of the given directory path.
 func dirName(dir string) string {
 	return filepath.Base(dir)
