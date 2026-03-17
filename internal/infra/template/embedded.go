@@ -2,6 +2,8 @@ package template
 
 import (
 	"fmt"
+	"io/fs"
+	"log"
 
 	"gopkg.in/yaml.v3"
 
@@ -58,4 +60,32 @@ func LoadMeta(name string) (*domain.TemplateMeta, error) {
 	}
 
 	return &meta, nil
+}
+
+// List returns TemplateInfo for every embedded template that has a valid
+// metadata.yaml. Templates with missing or unparseable metadata are skipped
+// with a log warning.
+func (e *EmbeddedSource) List() ([]domain.TemplateInfo, error) {
+	entries, err := fs.ReadDir(templates.FS, ".")
+	if err != nil {
+		return nil, fmt.Errorf("reading embedded templates: %w", err)
+	}
+
+	var result []domain.TemplateInfo
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		meta, err := LoadMeta(entry.Name())
+		if err != nil {
+			log.Printf("warning: skipping embedded template %q: %v", entry.Name(), err)
+			continue
+		}
+		result = append(result, domain.TemplateInfo{
+			Name:        meta.Name,
+			Description: meta.Description,
+			Source:      "builtin",
+		})
+	}
+	return result, nil
 }

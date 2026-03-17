@@ -22,3 +22,10 @@ type TemplateMeta struct {
 	Description string                      `yaml:"description"`
 	Variables   map[string]TemplateVariable `yaml:"variables"`
 }
+
+// TemplateInfo describes a discovered template for listing purposes.
+type TemplateInfo struct {
+	Name        string
+	Description string
+	Source      string // "builtin" or "user"
+}
