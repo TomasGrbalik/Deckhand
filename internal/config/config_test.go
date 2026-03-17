@@ -178,8 +178,14 @@ variables:
 		t.Fatalf("Load() returned error: %v", err)
 	}
 
+	if len(proj.Variables) != 2 {
+		t.Fatalf("len(Variables) = %d, want 2", len(proj.Variables))
+	}
 	if proj.Variables["go_version"] != "1.22" {
 		t.Errorf("Variables[go_version] = %q, want %q", proj.Variables["go_version"], "1.22")
+	}
+	if proj.Variables["lint"] != "true" {
+		t.Errorf("Variables[lint] = %q, want %q", proj.Variables["lint"], "true")
 	}
 }
 

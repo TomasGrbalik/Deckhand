@@ -268,7 +268,7 @@ func TestRender_VariableOverride(t *testing.T) {
 
 func TestRender_UnknownVariableIgnored(t *testing.T) {
 	source := &fakeSource{
-		dockerfile: fakeDockerfile,
+		dockerfile: `{{- if index .Vars "foo" -}}present{{- else -}}absent{{- end -}}`,
 		compose:    fakeCompose,
 		meta: &domain.TemplateMeta{
 			Name:      "base",
@@ -288,8 +288,8 @@ func TestRender_UnknownVariableIgnored(t *testing.T) {
 		t.Fatalf("Render() should not error for unknown variables: %v", err)
 	}
 
-	if !strings.Contains(out.Dockerfile, "Project: myapp") {
-		t.Errorf("Dockerfile should render normally\nGot:\n%s", out.Dockerfile)
+	if strings.Contains(out.Dockerfile, "present") {
+		t.Errorf("unknown variable should not be available in Vars\nGot:\n%s", out.Dockerfile)
 	}
 }
 
