@@ -209,6 +209,49 @@ func TestConnectFlags(t *testing.T) {
 	}
 }
 
+func TestConnectRejectsInvalidHost(t *testing.T) {
+	cases := []string{
+		"host with spaces",
+		"$(whoami)@server",
+		"; rm -rf /",
+		"user@server\nmalicious",
+	}
+
+	for _, host := range cases {
+		t.Run(host, func(t *testing.T) {
+			root := newRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs([]string{"connect", "--host", host})
+
+			err := root.Execute()
+			if err == nil {
+				t.Errorf("expected error for host %q, got nil", host)
+			}
+		})
+	}
+}
+
+func TestConnectAcceptsValidHost(t *testing.T) {
+	cases := []string{
+		"myserver",
+		"user@myserver",
+		"user@192.168.1.1",
+		"deploy@host.example.com",
+		"host:22",
+		"user@host:2222",
+	}
+
+	for _, host := range cases {
+		t.Run(host, func(t *testing.T) {
+			if !sshTargetRe.MatchString(host) {
+				t.Errorf("sshTargetRe should match valid host %q", host)
+			}
+		})
+	}
+}
+
 func TestVersionFlag(t *testing.T) {
 	root := newRootCmd()
 	buf := new(bytes.Buffer)
