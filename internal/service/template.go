@@ -12,6 +12,7 @@ import (
 // templates; later phases can swap in a git-based loader.
 type TemplateSource interface {
 	Load(name string) (dockerfile string, compose string, err error)
+	LoadMeta(name string) (*domain.TemplateMeta, error)
 }
 
 // RenderedOutput holds the rendered Dockerfile and compose file content.
@@ -22,9 +23,11 @@ type RenderedOutput struct {
 
 // templateData is the data structure passed to Go templates during rendering.
 // ExposedPorts contains only non-internal ports from the project config.
+// Vars contains template variables with defaults merged with project overrides.
 type templateData struct {
 	domain.Project
 	ExposedPorts []domain.PortMapping
+	Vars         map[string]string
 }
 
 // TemplateService renders project templates into Dockerfile and compose content.
@@ -39,6 +42,8 @@ func NewTemplateService(source TemplateSource) *TemplateService {
 
 // Render loads the template for the project and renders it with the project's
 // configuration. If the project has no template set, it defaults to "base".
+// Template variable defaults are merged with project overrides — project values
+// take precedence.
 func (s *TemplateService) Render(project domain.Project) (*RenderedOutput, error) {
 	name := project.Template
 	if name == "" {
@@ -50,7 +55,12 @@ func (s *TemplateService) Render(project domain.Project) (*RenderedOutput, error
 		return nil, fmt.Errorf("loading template %q: %w", name, err)
 	}
 
-	data := buildTemplateData(project)
+	meta, err := s.source.LoadMeta(name)
+	if err != nil {
+		return nil, fmt.Errorf("loading metadata for template %q: %w", name, err)
+	}
+
+	data := buildTemplateData(project, meta)
 
 	dockerfile, err := render("Dockerfile", dockerfileTmpl, data)
 	if err != nil {
@@ -69,18 +79,46 @@ func (s *TemplateService) Render(project domain.Project) (*RenderedOutput, error
 }
 
 // buildTemplateData creates the data passed to templates, filtering out
-// internal ports that should not be exposed on the host.
-func buildTemplateData(project domain.Project) templateData {
+// internal ports and merging template variable defaults with project overrides.
+func buildTemplateData(project domain.Project, meta *domain.TemplateMeta) templateData {
 	var exposed []domain.PortMapping
 	for _, p := range project.Ports {
 		if !p.Internal {
 			exposed = append(exposed, p)
 		}
 	}
+
+	vars := mergeVars(meta, project.Variables)
+
 	return templateData{
 		Project:      project,
 		ExposedPorts: exposed,
+		Vars:         vars,
 	}
+}
+
+// mergeVars builds the final variable map: start with template defaults, then
+// overlay project overrides. Unknown project variables are silently ignored.
+func mergeVars(meta *domain.TemplateMeta, projectVars map[string]string) map[string]string {
+	vars := make(map[string]string)
+
+	// Start with template defaults.
+	if meta != nil {
+		for k, v := range meta.Variables {
+			vars[k] = v.Default
+		}
+	}
+
+	// Overlay project overrides (only for variables the template declares).
+	for k, v := range projectVars {
+		if meta != nil {
+			if _, declared := meta.Variables[k]; declared {
+				vars[k] = v
+			}
+		}
+	}
+
+	return vars
 }
 
 // render parses and executes a single Go template.

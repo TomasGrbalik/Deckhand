@@ -11,6 +11,30 @@ import (
 	tmpl "github.com/TomasGrbalik/deckhand/internal/infra/template"
 )
 
+func TestLoadMeta_BaseTemplate(t *testing.T) {
+	meta, err := tmpl.LoadMeta("base")
+	if err != nil {
+		t.Fatalf("LoadMeta(\"base\") returned error: %v", err)
+	}
+
+	if meta.Name != "base" {
+		t.Errorf("Name = %q, want %q", meta.Name, "base")
+	}
+	if meta.Description == "" {
+		t.Error("Description should not be empty")
+	}
+	if meta.Variables == nil {
+		t.Error("Variables should not be nil (expected empty map)")
+	}
+}
+
+func TestLoadMeta_NonexistentTemplate(t *testing.T) {
+	_, err := tmpl.LoadMeta("nonexistent")
+	if err == nil {
+		t.Fatal("LoadMeta(\"nonexistent\") should return an error")
+	}
+}
+
 func TestLoad_BaseTemplate(t *testing.T) {
 	dockerfile, compose, err := tmpl.Load("base")
 	if err != nil {

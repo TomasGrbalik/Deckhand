@@ -1,0 +1,3 @@
+name: base
+description: Minimal Ubuntu dev container with common tools
+variables: {}
