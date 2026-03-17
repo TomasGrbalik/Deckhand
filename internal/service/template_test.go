@@ -14,6 +14,8 @@ type fakeSource struct {
 	dockerfile string
 	compose    string
 	err        error
+	meta       *domain.TemplateMeta
+	metaErr    error
 }
 
 func (f *fakeSource) Load(_ string) (string, string, error) {
@@ -21,6 +23,16 @@ func (f *fakeSource) Load(_ string) (string, string, error) {
 		return "", "", f.err
 	}
 	return f.dockerfile, f.compose, nil
+}
+
+func (f *fakeSource) LoadMeta(_ string) (*domain.TemplateMeta, error) {
+	if f.metaErr != nil {
+		return nil, f.metaErr
+	}
+	if f.meta != nil {
+		return f.meta, nil
+	}
+	return &domain.TemplateMeta{Name: "base", Description: "test template"}, nil
 }
 
 // Minimal templates that exercise the key template variables.
@@ -134,6 +146,10 @@ func (c *nameCapture) Load(name string) (string, string, error) {
 	return c.inner.Load(name)
 }
 
+func (c *nameCapture) LoadMeta(name string) (*domain.TemplateMeta, error) {
+	return c.inner.LoadMeta(name)
+}
+
 func TestRender_TemplateNotFound(t *testing.T) {
 	source := &fakeSource{
 		err: errors.New("template not found"),
@@ -193,5 +209,105 @@ func TestRender_InternalPortsFiltered(t *testing.T) {
 
 	if strings.Contains(out.Compose, "5432") {
 		t.Errorf("compose should not contain internal port 5432\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_VariableDefaults(t *testing.T) {
+	source := &fakeSource{
+		dockerfile: `FROM golang:{{ .Vars.go_version }}`,
+		compose:    fakeCompose,
+		meta: &domain.TemplateMeta{
+			Name: "go",
+			Variables: map[string]domain.TemplateVariable{
+				"go_version": {Default: "1.23", Description: "Go version"},
+			},
+		},
+	}
+	svc := service.NewTemplateService(source)
+
+	project := domain.Project{Name: "myapp", Template: "go"}
+
+	out, err := svc.Render(project)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(out.Dockerfile, "golang:1.23") {
+		t.Errorf("Dockerfile should use default go_version 1.23\nGot:\n%s", out.Dockerfile)
+	}
+}
+
+func TestRender_VariableOverride(t *testing.T) {
+	source := &fakeSource{
+		dockerfile: `FROM golang:{{ .Vars.go_version }}`,
+		compose:    fakeCompose,
+		meta: &domain.TemplateMeta{
+			Name: "go",
+			Variables: map[string]domain.TemplateVariable{
+				"go_version": {Default: "1.23", Description: "Go version"},
+			},
+		},
+	}
+	svc := service.NewTemplateService(source)
+
+	project := domain.Project{
+		Name:      "myapp",
+		Template:  "go",
+		Variables: map[string]string{"go_version": "1.22"},
+	}
+
+	out, err := svc.Render(project)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(out.Dockerfile, "golang:1.22") {
+		t.Errorf("Dockerfile should use overridden go_version 1.22\nGot:\n%s", out.Dockerfile)
+	}
+}
+
+func TestRender_UnknownVariableIgnored(t *testing.T) {
+	source := &fakeSource{
+		dockerfile: `{{- if index .Vars "foo" -}}present{{- else -}}absent{{- end -}}`,
+		compose:    fakeCompose,
+		meta: &domain.TemplateMeta{
+			Name:      "base",
+			Variables: map[string]domain.TemplateVariable{},
+		},
+	}
+	svc := service.NewTemplateService(source)
+
+	project := domain.Project{
+		Name:      "myapp",
+		Template:  "base",
+		Variables: map[string]string{"foo": "bar"},
+	}
+
+	out, err := svc.Render(project)
+	if err != nil {
+		t.Fatalf("Render() should not error for unknown variables: %v", err)
+	}
+
+	if strings.Contains(out.Dockerfile, "present") {
+		t.Errorf("unknown variable should not be available in Vars\nGot:\n%s", out.Dockerfile)
+	}
+}
+
+func TestRender_NoVariablesField(t *testing.T) {
+	svc := service.NewTemplateService(newFakeSource())
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		// Variables not set — should default to empty map
+	}
+
+	out, err := svc.Render(project)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(out.Dockerfile, "Project: myapp") {
+		t.Errorf("Dockerfile should render normally\nGot:\n%s", out.Dockerfile)
 	}
 }

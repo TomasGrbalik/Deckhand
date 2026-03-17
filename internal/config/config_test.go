@@ -129,6 +129,87 @@ func TestSave_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestSave_RoundTrip_WithVariables(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	original := &domain.Project{
+		Name:      "myapp",
+		Template:  "go",
+		Variables: map[string]string{"go_version": "1.22", "lint": "true"},
+	}
+
+	if err := config.Save(cfgPath, original); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+
+	loaded, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() after Save() error: %v", err)
+	}
+
+	if len(loaded.Variables) != 2 {
+		t.Fatalf("len(Variables) = %d, want 2", len(loaded.Variables))
+	}
+	if loaded.Variables["go_version"] != "1.22" {
+		t.Errorf("Variables[go_version] = %q, want %q", loaded.Variables["go_version"], "1.22")
+	}
+	if loaded.Variables["lint"] != "true" {
+		t.Errorf("Variables[lint] = %q, want %q", loaded.Variables["lint"], "true")
+	}
+}
+
+func TestLoad_ConfigWithVariables(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	content := `project: myapp
+template: go
+variables:
+  go_version: "1.22"
+  lint: "true"
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	proj, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if len(proj.Variables) != 2 {
+		t.Fatalf("len(Variables) = %d, want 2", len(proj.Variables))
+	}
+	if proj.Variables["go_version"] != "1.22" {
+		t.Errorf("Variables[go_version] = %q, want %q", proj.Variables["go_version"], "1.22")
+	}
+	if proj.Variables["lint"] != "true" {
+		t.Errorf("Variables[lint] = %q, want %q", proj.Variables["lint"], "true")
+	}
+}
+
+func TestLoad_ConfigWithoutVariables(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	content := `project: myapp
+template: base
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	proj, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if len(proj.Variables) != 0 {
+		t.Errorf("Variables should be empty, got %v", proj.Variables)
+	}
+}
+
 func TestLoad_EmptyFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, ".deckhand.yaml")

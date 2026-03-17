@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -17,6 +18,9 @@ func TestProjectYAMLRoundTrip(t *testing.T) {
 		Env: map[string]string{
 			"DATABASE_URL": "postgresql://dev:secret@postgres:5432/appdb",
 			"DEBUG":        "true",
+		},
+		Variables: map[string]string{
+			"go_version": "1.23",
 		},
 	}
 
@@ -47,6 +51,35 @@ func TestProjectYAMLRoundTrip(t *testing.T) {
 	}
 	if decoded.Env["DATABASE_URL"] != original.Env["DATABASE_URL"] {
 		t.Errorf("Env[DATABASE_URL]: got %q, want %q", decoded.Env["DATABASE_URL"], original.Env["DATABASE_URL"])
+	}
+	if decoded.Variables["go_version"] != "1.23" {
+		t.Errorf("Variables[go_version]: got %q, want %q", decoded.Variables["go_version"], "1.23")
+	}
+}
+
+func TestProjectYAMLRoundTrip_NoVariables(t *testing.T) {
+	original := Project{
+		Name:     "my-api",
+		Template: "base",
+	}
+
+	data, err := yaml.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	// omitempty should exclude variables from output
+	if strings.Contains(string(data), "variables") {
+		t.Errorf("marshaled YAML should not contain 'variables' when empty\nGot:\n%s", data)
+	}
+
+	var decoded Project
+	if err := yaml.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if len(decoded.Variables) != 0 {
+		t.Errorf("Variables should be empty, got %v", decoded.Variables)
 	}
 }
 
