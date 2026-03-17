@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -22,7 +23,10 @@ type FilesystemSource struct {
 // Load reads the raw Dockerfile and compose template strings for the given
 // template name from the filesystem directory.
 func (f *FilesystemSource) Load(name string) (dockerfile string, compose string, err error) {
-	base := filepath.Join(f.Dir, name)
+	base, err := f.templateDir(name)
+	if err != nil {
+		return "", "", err
+	}
 
 	df, err := os.ReadFile(filepath.Join(base, "Dockerfile.tmpl"))
 	if err != nil {
@@ -40,7 +44,11 @@ func (f *FilesystemSource) Load(name string) (dockerfile string, compose string,
 // LoadMeta reads and parses metadata.yaml for the given template name from the
 // filesystem directory.
 func (f *FilesystemSource) LoadMeta(name string) (*domain.TemplateMeta, error) {
-	data, err := os.ReadFile(filepath.Join(f.Dir, name, "metadata.yaml"))
+	base, err := f.templateDir(name)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(base, "metadata.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("loading metadata for template %q: %w", name, err)
 	}
@@ -51,6 +59,16 @@ func (f *FilesystemSource) LoadMeta(name string) (*domain.TemplateMeta, error) {
 	}
 
 	return &meta, nil
+}
+
+// templateDir validates a template name and returns the full directory path.
+// It rejects names containing path separators or traversal components.
+func (f *FilesystemSource) templateDir(name string) (string, error) {
+	clean := filepath.Clean(name)
+	if clean == "." || clean == ".." || clean != filepath.Base(clean) || strings.ContainsRune(clean, os.PathSeparator) {
+		return "", fmt.Errorf("invalid template name %q", name)
+	}
+	return filepath.Join(f.Dir, clean), nil
 }
 
 // List returns TemplateInfo for every template in the directory that has a

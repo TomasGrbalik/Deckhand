@@ -41,7 +41,8 @@ func TestFilesystemSource_List_WithValidTemplate(t *testing.T) {
 }
 
 func TestFilesystemSource_List_NonexistentDir(t *testing.T) {
-	fs := &tmpl.FilesystemSource{Dir: "/tmp/nonexistent-deckhand-dir"}
+	missingDir := filepath.Join(t.TempDir(), "does-not-exist")
+	fs := &tmpl.FilesystemSource{Dir: missingDir}
 	result, err := fs.List()
 	if err != nil {
 		t.Fatalf("List() should not error for nonexistent dir, got: %v", err)
@@ -114,6 +115,22 @@ func TestFilesystemSource_LoadMeta(t *testing.T) {
 	}
 	if meta.Name != "mytemplate" {
 		t.Errorf("Name = %q, want %q", meta.Name, "mytemplate")
+	}
+}
+
+func TestFilesystemSource_Load_RejectsPathTraversal(t *testing.T) {
+	fs := &tmpl.FilesystemSource{Dir: t.TempDir()}
+
+	traversalNames := []string{"../../../etc/passwd", "..", "foo/bar", "/absolute"}
+	for _, name := range traversalNames {
+		_, _, err := fs.Load(name)
+		if err == nil {
+			t.Errorf("Load(%q) should return error for path traversal", name)
+		}
+		_, err = fs.LoadMeta(name)
+		if err == nil {
+			t.Errorf("LoadMeta(%q) should return error for path traversal", name)
+		}
 	}
 }
 
