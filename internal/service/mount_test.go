@@ -8,6 +8,12 @@ import (
 	"github.com/TomasGrbalik/deckhand/internal/domain"
 )
 
+func setTestHome(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+}
+
 func TestMergeMounts_BasicThreeWayMerge(t *testing.T) {
 	t.Setenv("GH_TOKEN", "ghp_abc123")
 	t.Setenv("API_KEY", "key_xyz")
@@ -152,8 +158,8 @@ func TestMergeMounts_TildeExpansion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Override HOME so ~ expands to our temp dir.
-	t.Setenv("HOME", fakeHome)
+	// Override home-related env vars so ~ expansion is deterministic.
+	setTestHome(t, fakeHome)
 
 	input := domain.Mounts{
 		Secrets: []domain.SecretMount{
@@ -177,7 +183,7 @@ func TestMergeMounts_TildeExpansion(t *testing.T) {
 
 func TestMergeMounts_MissingSourceFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("HOME", tmpDir)
+	setTestHome(t, tmpDir)
 
 	input := domain.Mounts{
 		Secrets: []domain.SecretMount{

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -141,7 +142,10 @@ func resolveFilePath(source string) (string, error) {
 	expanded := expandTilde(source)
 
 	if _, err := os.Stat(expanded); err != nil {
-		return "", fmt.Errorf("source file does not exist: %s", expanded)
+		if errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("source file does not exist: %s", expanded)
+		}
+		return "", fmt.Errorf("cannot access source file %s: %w", expanded, err)
 	}
 
 	return expanded, nil
