@@ -38,9 +38,59 @@ func newEnvironmentService(proj domain.Project, dir string) *service.Environment
 	return service.NewEnvironmentService(
 		&template.EmbeddedSource{},
 		docker.NewCompose(),
+		nil, // no volume manager — commands that need it create one explicitly
 		proj,
 		dir,
 	)
+}
+
+// newEnvironmentServiceWithVolumes creates an EnvironmentService with volume
+// management support. Used by destroy which needs to discover and remove
+// labeled volumes.
+func newEnvironmentServiceWithVolumes(proj domain.Project, dir string) (*service.EnvironmentService, func(), error) {
+	client, err := docker.NewClient()
+	if err != nil {
+		return nil, nil, fmt.Errorf("connecting to docker: %w", err)
+	}
+	cleanup := func() { _ = client.Close() }
+
+	volMgr := newVolumeListerAdapter(docker.NewVolume(client.API()))
+	svc := service.NewEnvironmentService(
+		&template.EmbeddedSource{},
+		docker.NewCompose(),
+		volMgr,
+		proj,
+		dir,
+	)
+	return svc, cleanup, nil
+}
+
+// volumeListerAdapter adapts docker.Volume (infra) to service.VolumeManager
+// by mapping docker.VolumeInfo to service.VolumeInfo.
+type volumeListerAdapter struct {
+	vol *docker.Volume
+}
+
+func newVolumeListerAdapter(vol *docker.Volume) *volumeListerAdapter {
+	return &volumeListerAdapter{vol: vol}
+}
+
+// ListByProject implements service.VolumeManager.
+func (a *volumeListerAdapter) ListByProject(projectName string) ([]service.VolumeInfo, error) {
+	infos, err := a.vol.ListByProject(projectName)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]service.VolumeInfo, len(infos))
+	for i, info := range infos {
+		result[i] = service.VolumeInfo{Name: info.Name}
+	}
+	return result, nil
+}
+
+// Remove implements service.VolumeManager.
+func (a *volumeListerAdapter) Remove(volumeName string) error {
+	return a.vol.Remove(volumeName)
 }
 
 // newContainerService creates a ContainerService wired to a real Docker client.
