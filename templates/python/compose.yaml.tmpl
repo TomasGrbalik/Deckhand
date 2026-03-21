@@ -4,18 +4,39 @@
 services:
   devcontainer:
     build:
-      context: ..
-      dockerfile: .deckhand/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     labels:
       dev.deckhand.managed: "true"
       dev.deckhand.project: "{{ .Name }}"
       dev.deckhand.service: "devcontainer"
+{{- if .Volumes }}
     volumes:
-      - ..:/workspace
+{{- range .Volumes }}
+      - {{ .ComposeEntry }}
+{{- end }}
+{{- end }}
 {{- if .ExposedPorts }}
     ports:
 {{- range .ExposedPorts }}
       - "127.0.0.1:{{ .Port }}:{{ .Port }}"
 {{- end }}
 {{- end }}
+{{- if .Environment }}
+    environment:
+{{- range .Environment }}
+      {{ .Key }}: "{{ .Value }}"
+{{- end }}
+{{- end }}
     command: sleep infinity
+{{- if .NamedVolumes }}
+
+volumes:
+{{- range .NamedVolumes }}
+  {{ .ComposeName }}:
+    labels:
+      dev.deckhand.managed: "true"
+      dev.deckhand.project: "{{ $.Name }}"
+      dev.deckhand.volume: "{{ .MountName }}"
+{{- end }}
+{{- end }}

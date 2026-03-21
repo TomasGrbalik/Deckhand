@@ -43,16 +43,38 @@ const fakeDockerfile = `FROM ubuntu:24.04
 const fakeCompose = `services:
   devcontainer:
     build:
-      context: ..
+      context: .
+      dockerfile: Dockerfile
+{{- if .Volumes }}
     volumes:
-      - ..:/workspace
+{{- range .Volumes }}
+      - {{ .ComposeEntry }}
+{{- end }}
+{{- end }}
 {{- if .ExposedPorts }}
     ports:
 {{- range .ExposedPorts }}
       - "127.0.0.1:{{ .Port }}:{{ .Port }}"
 {{- end }}
 {{- end }}
+{{- if .Environment }}
+    environment:
+{{- range .Environment }}
+      {{ .Key }}: "{{ .Value }}"
+{{- end }}
+{{- end }}
     command: sleep infinity
+{{- if .NamedVolumes }}
+
+volumes:
+{{- range .NamedVolumes }}
+  {{ .ComposeName }}:
+    labels:
+      dev.deckhand.managed: "true"
+      dev.deckhand.project: "{{ $.Name }}"
+      dev.deckhand.volume: "{{ .MountName }}"
+{{- end }}
+{{- end }}
 `
 
 func newFakeSource() *fakeSource {
@@ -71,7 +93,7 @@ func TestRender_WithPorts(t *testing.T) {
 		Ports:    []domain.PortMapping{{Port: 8080}},
 	}
 
-	out, err := svc.Render(project)
+	out, err := svc.Render(project, domain.Mounts{})
 	if err != nil {
 		t.Fatalf("Render() error: %v", err)
 	}
@@ -83,10 +105,6 @@ func TestRender_WithPorts(t *testing.T) {
 	if !strings.Contains(out.Compose, "127.0.0.1:8080:8080") {
 		t.Errorf("compose missing port mapping\nGot:\n%s", out.Compose)
 	}
-
-	if !strings.Contains(out.Compose, "..:/workspace") {
-		t.Errorf("compose missing workspace volume\nGot:\n%s", out.Compose)
-	}
 }
 
 func TestRender_NoPorts(t *testing.T) {
@@ -97,7 +115,7 @@ func TestRender_NoPorts(t *testing.T) {
 		Template: "base",
 	}
 
-	out, err := svc.Render(project)
+	out, err := svc.Render(project, domain.Mounts{})
 	if err != nil {
 		t.Fatalf("Render() error: %v", err)
 	}
@@ -125,7 +143,7 @@ func TestRender_DefaultTemplateName(t *testing.T) {
 		Template: "", // empty — should default to "base"
 	}
 
-	_, err := svc.Render(project)
+	_, err := svc.Render(project, domain.Mounts{})
 	if err != nil {
 		t.Fatalf("Render() error: %v", err)
 	}
@@ -161,7 +179,7 @@ func TestRender_TemplateNotFound(t *testing.T) {
 		Template: "nonexistent",
 	}
 
-	_, err := svc.Render(project)
+	_, err := svc.Render(project, domain.Mounts{})
 	if err == nil {
 		t.Fatal("expected error for missing template, got nil")
 	}
@@ -180,7 +198,7 @@ func TestRender_MalformedTemplate(t *testing.T) {
 
 	project := domain.Project{Name: "myapp", Template: "base"}
 
-	_, err := svc.Render(project)
+	_, err := svc.Render(project, domain.Mounts{})
 	if err == nil {
 		t.Fatal("expected error for malformed template, got nil")
 	}
@@ -198,7 +216,7 @@ func TestRender_InternalPortsFiltered(t *testing.T) {
 		},
 	}
 
-	out, err := svc.Render(project)
+	out, err := svc.Render(project, domain.Mounts{})
 	if err != nil {
 		t.Fatalf("Render() error: %v", err)
 	}
@@ -227,7 +245,7 @@ func TestRender_VariableDefaults(t *testing.T) {
 
 	project := domain.Project{Name: "myapp", Template: "go"}
 
-	out, err := svc.Render(project)
+	out, err := svc.Render(project, domain.Mounts{})
 	if err != nil {
 		t.Fatalf("Render() error: %v", err)
 	}
@@ -256,7 +274,7 @@ func TestRender_VariableOverride(t *testing.T) {
 		Variables: map[string]string{"go_version": "1.22"},
 	}
 
-	out, err := svc.Render(project)
+	out, err := svc.Render(project, domain.Mounts{})
 	if err != nil {
 		t.Fatalf("Render() error: %v", err)
 	}
@@ -283,7 +301,7 @@ func TestRender_UnknownVariableIgnored(t *testing.T) {
 		Variables: map[string]string{"foo": "bar"},
 	}
 
-	out, err := svc.Render(project)
+	out, err := svc.Render(project, domain.Mounts{})
 	if err != nil {
 		t.Fatalf("Render() should not error for unknown variables: %v", err)
 	}
@@ -302,12 +320,229 @@ func TestRender_NoVariablesField(t *testing.T) {
 		// Variables not set — should default to empty map
 	}
 
-	out, err := svc.Render(project)
+	out, err := svc.Render(project, domain.Mounts{})
 	if err != nil {
 		t.Fatalf("Render() error: %v", err)
 	}
 
 	if !strings.Contains(out.Dockerfile, "Project: myapp") {
 		t.Errorf("Dockerfile should render normally\nGot:\n%s", out.Dockerfile)
+	}
+}
+
+// --- Mount rendering tests ---
+
+func TestRender_NamedVolume(t *testing.T) {
+	svc := service.NewTemplateService(newFakeSource())
+
+	project := domain.Project{Name: "myapp", Template: "base"}
+	mounts := domain.Mounts{
+		Volumes: []domain.VolumeMount{
+			{Name: "workspace", Target: "/workspace"},
+		},
+	}
+
+	out, err := svc.Render(project, mounts)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(out.Compose, "myapp-workspace:/workspace") {
+		t.Errorf("compose missing named volume entry\nGot:\n%s", out.Compose)
+	}
+
+	if !strings.Contains(out.Compose, "volumes:\n  myapp-workspace:") {
+		t.Errorf("compose missing top-level volumes declaration\nGot:\n%s", out.Compose)
+	}
+
+	if !strings.Contains(out.Compose, `dev.deckhand.managed: "true"`) {
+		t.Errorf("compose missing deckhand managed label\nGot:\n%s", out.Compose)
+	}
+
+	if !strings.Contains(out.Compose, `dev.deckhand.project: "myapp"`) {
+		t.Errorf("compose missing deckhand project label\nGot:\n%s", out.Compose)
+	}
+
+	if !strings.Contains(out.Compose, `dev.deckhand.volume: "workspace"`) {
+		t.Errorf("compose missing deckhand volume label\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_SecretFileBindMount(t *testing.T) {
+	svc := service.NewTemplateService(newFakeSource())
+
+	project := domain.Project{Name: "myapp", Template: "base"}
+	mounts := domain.Mounts{
+		Secrets: []domain.SecretMount{
+			{
+				Name:     "gitconfig",
+				Source:   "/home/user/.gitconfig",
+				Target:   "/home/dev/.gitconfig",
+				ReadOnly: true,
+			},
+		},
+	}
+
+	out, err := svc.Render(project, mounts)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(out.Compose, "/home/user/.gitconfig:/home/dev/.gitconfig:ro") {
+		t.Errorf("compose missing secret file bind mount\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_SecretEnvVar(t *testing.T) {
+	svc := service.NewTemplateService(newFakeSource())
+
+	project := domain.Project{Name: "myapp", Template: "base"}
+	mounts := domain.Mounts{
+		Secrets: []domain.SecretMount{
+			{
+				Name:   "gh-token",
+				Source: "ghp_abc",
+				Env:    "GH_TOKEN",
+			},
+		},
+	}
+
+	out, err := svc.Render(project, mounts)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(out.Compose, `GH_TOKEN: "ghp_abc"`) {
+		t.Errorf("compose missing secret env var\nGot:\n%s", out.Compose)
+	}
+
+	// Env-only secret should NOT produce a bind mount.
+	for line := range strings.SplitSeq(out.Compose, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- ghp_abc:") {
+			t.Errorf("env-only secret should not produce a bind mount\nGot:\n%s", out.Compose)
+		}
+	}
+}
+
+func TestRender_SocketMount(t *testing.T) {
+	svc := service.NewTemplateService(newFakeSource())
+
+	project := domain.Project{Name: "myapp", Template: "base"}
+	mounts := domain.Mounts{
+		Sockets: []domain.SocketMount{
+			{
+				Name:   "ssh-agent",
+				Source: "/run/user/1000/ssh.sock",
+				Target: "/run/ssh.sock",
+				Env:    "SSH_AUTH_SOCK",
+			},
+		},
+	}
+
+	out, err := svc.Render(project, mounts)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(out.Compose, "/run/user/1000/ssh.sock:/run/ssh.sock") {
+		t.Errorf("compose missing socket bind mount\nGot:\n%s", out.Compose)
+	}
+
+	if !strings.Contains(out.Compose, `SSH_AUTH_SOCK: "/run/ssh.sock"`) {
+		t.Errorf("compose missing socket env var\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_EnvKeyCollision(t *testing.T) {
+	svc := service.NewTemplateService(newFakeSource())
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		Env:      map[string]string{"GH_TOKEN": "hardcoded"},
+	}
+	mounts := domain.Mounts{
+		Secrets: []domain.SecretMount{
+			{
+				Name:   "gh-token",
+				Source: "fromenv",
+				Env:    "GH_TOKEN",
+			},
+		},
+	}
+
+	out, err := svc.Render(project, mounts)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(out.Compose, `GH_TOKEN: "fromenv"`) {
+		t.Errorf("secret should override static env\nGot:\n%s", out.Compose)
+	}
+
+	if strings.Contains(out.Compose, "hardcoded") {
+		t.Errorf("static env value should be overridden\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_EnvironmentSorted(t *testing.T) {
+	svc := service.NewTemplateService(newFakeSource())
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		Env: map[string]string{
+			"Z_VAR": "z",
+			"A_VAR": "a",
+			"M_VAR": "m",
+		},
+	}
+
+	out, err := svc.Render(project, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	aIdx := strings.Index(out.Compose, "A_VAR")
+	mIdx := strings.Index(out.Compose, "M_VAR")
+	zIdx := strings.Index(out.Compose, "Z_VAR")
+
+	if aIdx < 0 || mIdx < 0 || zIdx < 0 {
+		t.Fatalf("compose missing env vars\nGot:\n%s", out.Compose)
+	}
+
+	if aIdx >= mIdx || mIdx >= zIdx {
+		t.Errorf("environment vars not in alphabetical order\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_ZeroMounts(t *testing.T) {
+	svc := service.NewTemplateService(newFakeSource())
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+	}
+
+	out, err := svc.Render(project, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if strings.Contains(out.Compose, "volumes:") {
+		t.Errorf("compose should not have volumes section with zero mounts\nGot:\n%s", out.Compose)
+	}
+
+	if strings.Contains(out.Compose, "environment:") {
+		t.Errorf("compose should not have environment section with zero mounts and no env\nGot:\n%s", out.Compose)
+	}
+
+	if !strings.Contains(out.Compose, "context: .") {
+		t.Errorf("compose should have build context '.'\nGot:\n%s", out.Compose)
+	}
+
+	if !strings.Contains(out.Compose, "dockerfile: Dockerfile") {
+		t.Errorf("compose should have dockerfile 'Dockerfile'\nGot:\n%s", out.Compose)
 	}
 }
