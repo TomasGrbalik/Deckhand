@@ -15,6 +15,11 @@ import (
 	"github.com/TomasGrbalik/deckhand/internal/service"
 )
 
+// errCanceled is returned when the user aborts an interactive prompt (Ctrl+C).
+// The root command checks for this sentinel to exit cleanly without printing
+// an error message.
+var errCanceled = errors.New("canceled")
+
 func newInitCmd() *cobra.Command {
 	var templateFlag string
 	var projectFlag string
@@ -66,7 +71,7 @@ func newInitCmd() *cobra.Command {
 
 			// --- Project name ---
 			projectName := projectFlag
-			if projectName == "" {
+			if !cmd.Flags().Changed("project") {
 				defaultName := dirName(dir)
 				projectName, err = promptProjectName(defaultName)
 				if err != nil {
@@ -147,7 +152,7 @@ func pickTemplate(svc *service.InitService) (string, error) {
 		Run()
 	if err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
-			return "", errors.New("canceled")
+			return "", errCanceled
 		}
 		return "", fmt.Errorf("template selection: %w", err)
 	}
@@ -185,7 +190,7 @@ func editVariables(svc *service.InitService, meta *domain.TemplateMeta, defaults
 	err := huh.NewForm(huh.NewGroup(fields...)).Run()
 	if err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
-			return nil, errors.New("canceled")
+			return nil, errCanceled
 		}
 		return nil, fmt.Errorf("variable input: %w", err)
 	}
@@ -209,7 +214,7 @@ func promptProjectName(defaultName string) (string, error) {
 		Run()
 	if err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
-			return "", errors.New("canceled")
+			return "", errCanceled
 		}
 		return "", fmt.Errorf("project name input: %w", err)
 	}

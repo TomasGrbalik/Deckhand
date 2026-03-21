@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +39,13 @@ func newRootCmd() *cobra.Command {
 	return cmd
 }
 
-// Execute runs the root command.
+// Execute runs the root command. If a subcommand returns errCanceled
+// (user pressed Ctrl+C during an interactive prompt), it returns nil
+// so main exits cleanly without printing an error.
 func Execute() error {
-	return newRootCmd().Execute()
+	err := newRootCmd().Execute()
+	if errors.Is(err, errCanceled) {
+		return nil
+	}
+	return err
 }
