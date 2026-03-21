@@ -236,3 +236,134 @@ func TestLoad_EmptyFile(t *testing.T) {
 		t.Errorf("len(Env) = %d, want 0", len(proj.Env))
 	}
 }
+
+func TestLoadGlobal_CompleteConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	content := `defaults:
+  template: go
+  shell: zsh
+
+ssh:
+  user: dev
+  host: 100.64.1.3
+
+mounts:
+  secrets:
+    - name: gh-token
+      source: ${GH_TOKEN}
+      env: GH_TOKEN
+    - name: gitconfig
+      source: ~/.gitconfig
+      target: /home/dev/.gitconfig
+      readonly: true
+  sockets:
+    - name: ssh-agent
+      source: ${SSH_AUTH_SOCK}
+      target: /run/ssh-agent.sock
+      env: SSH_AUTH_SOCK
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadGlobal(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadGlobal() returned error: %v", err)
+	}
+
+	if cfg.Defaults.Template != "go" {
+		t.Errorf("Defaults.Template = %q, want %q", cfg.Defaults.Template, "go")
+	}
+	if cfg.Defaults.Shell != "zsh" {
+		t.Errorf("Defaults.Shell = %q, want %q", cfg.Defaults.Shell, "zsh")
+	}
+	if cfg.SSH.User != "dev" {
+		t.Errorf("SSH.User = %q, want %q", cfg.SSH.User, "dev")
+	}
+	if cfg.SSH.Host != "100.64.1.3" {
+		t.Errorf("SSH.Host = %q, want %q", cfg.SSH.Host, "100.64.1.3")
+	}
+	if len(cfg.Mounts.Secrets) != 2 {
+		t.Fatalf("len(Mounts.Secrets) = %d, want 2", len(cfg.Mounts.Secrets))
+	}
+	if cfg.Mounts.Secrets[0].Name != "gh-token" {
+		t.Errorf("Mounts.Secrets[0].Name = %q, want %q", cfg.Mounts.Secrets[0].Name, "gh-token")
+	}
+	if cfg.Mounts.Secrets[1].ReadOnly != true {
+		t.Errorf("Mounts.Secrets[1].ReadOnly = %v, want true", cfg.Mounts.Secrets[1].ReadOnly)
+	}
+	if len(cfg.Mounts.Sockets) != 1 {
+		t.Fatalf("len(Mounts.Sockets) = %d, want 1", len(cfg.Mounts.Sockets))
+	}
+	if cfg.Mounts.Sockets[0].Name != "ssh-agent" {
+		t.Errorf("Mounts.Sockets[0].Name = %q, want %q", cfg.Mounts.Sockets[0].Name, "ssh-agent")
+	}
+}
+
+func TestLoadGlobal_MissingFile(t *testing.T) {
+	cfg, err := config.LoadGlobal("/nonexistent/path/config.yaml")
+	if err != nil {
+		t.Fatalf("LoadGlobal() should not return error for missing file, got: %v", err)
+	}
+
+	// Should return zero-value GlobalConfig.
+	if cfg.Defaults.Template != "" {
+		t.Errorf("Defaults.Template = %q, want empty", cfg.Defaults.Template)
+	}
+	if cfg.Defaults.Shell != "" {
+		t.Errorf("Defaults.Shell = %q, want empty", cfg.Defaults.Shell)
+	}
+	if cfg.SSH.User != "" {
+		t.Errorf("SSH.User = %q, want empty", cfg.SSH.User)
+	}
+	if len(cfg.Mounts.Volumes) != 0 {
+		t.Errorf("len(Mounts.Volumes) = %d, want 0", len(cfg.Mounts.Volumes))
+	}
+}
+
+func TestLoadGlobal_PartialConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	content := `defaults:
+  template: go
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadGlobal(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadGlobal() returned error: %v", err)
+	}
+
+	if cfg.Defaults.Template != "go" {
+		t.Errorf("Defaults.Template = %q, want %q", cfg.Defaults.Template, "go")
+	}
+	if cfg.Defaults.Shell != "" {
+		t.Errorf("Defaults.Shell = %q, want empty", cfg.Defaults.Shell)
+	}
+	if cfg.SSH.User != "" {
+		t.Errorf("SSH.User = %q, want empty", cfg.SSH.User)
+	}
+	if len(cfg.Mounts.Secrets) != 0 {
+		t.Errorf("len(Mounts.Secrets) = %d, want 0", len(cfg.Mounts.Secrets))
+	}
+}
+
+func TestLoadGlobal_MalformedYAML(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	content := "defaults:\n\t\tinvalid:\nyaml: [[[broken"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := config.LoadGlobal(cfgPath)
+	if err == nil {
+		t.Fatal("LoadGlobal() should return error for malformed YAML")
+	}
+}

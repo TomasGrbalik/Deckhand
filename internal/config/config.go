@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -45,4 +46,29 @@ func Save(path string, proj *domain.Project) error {
 	}
 
 	return nil
+}
+
+// LoadGlobal reads the global config file and returns the parsed GlobalConfig.
+// If the file does not exist, it returns a zero-value GlobalConfig and nil error.
+// If the file exists but contains invalid YAML, it returns an error.
+func LoadGlobal(path string) (*domain.GlobalConfig, error) {
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return &domain.GlobalConfig{}, nil
+		}
+		return nil, fmt.Errorf("checking global config %s: %w", path, err)
+	}
+
+	k := koanf.New(".")
+
+	if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
+		return nil, fmt.Errorf("parsing global config %s: %w", path, err)
+	}
+
+	var cfg domain.GlobalConfig
+	if err := k.UnmarshalWithConf("", &cfg, koanf.UnmarshalConf{Tag: "yaml"}); err != nil {
+		return nil, fmt.Errorf("unmarshalling global config %s: %w", path, err)
+	}
+
+	return &cfg, nil
 }
