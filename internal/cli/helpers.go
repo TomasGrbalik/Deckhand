@@ -113,3 +113,36 @@ func mapContainerInfos(infos []docker.ContainerInfo) []domain.Container {
 func dirName(dir string) string {
 	return filepath.Base(dir)
 }
+
+// compositeSource tries multiple TemplateSource implementations in order.
+// The first source that succeeds wins. This lets user templates on disk
+// override embedded templates for Load/LoadMeta operations.
+type compositeSource struct {
+	sources []service.TemplateSource
+}
+
+// Load implements service.TemplateSource.
+func (c *compositeSource) Load(name string) (string, string, error) {
+	var lastErr error
+	for _, src := range c.sources {
+		df, comp, err := src.Load(name)
+		if err == nil {
+			return df, comp, nil
+		}
+		lastErr = err
+	}
+	return "", "", lastErr
+}
+
+// LoadMeta implements service.TemplateSource.
+func (c *compositeSource) LoadMeta(name string) (*domain.TemplateMeta, error) {
+	var lastErr error
+	for _, src := range c.sources {
+		meta, err := src.LoadMeta(name)
+		if err == nil {
+			return meta, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}

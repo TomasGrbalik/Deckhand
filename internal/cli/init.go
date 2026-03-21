@@ -92,6 +92,8 @@ func newInitCmd() *cobra.Command {
 }
 
 // newInitService creates an InitService wired to real template sources.
+// The composite source tries user templates (filesystem) before falling back
+// to embedded, so user templates can override builtins for metadata loading.
 func newInitService() *service.InitService {
 	embedded := &template.EmbeddedSource{}
 
@@ -106,8 +108,9 @@ func newInitService() *service.InitService {
 	userDir := filepath.Join(home, ".config", "deckhand", "templates")
 	fs := &template.FilesystemSource{Dir: userDir}
 	registry := service.NewTemplateRegistry(embedded, fs)
+	source := &compositeSource{sources: []service.TemplateSource{fs, embedded}}
 
-	return service.NewInitService(registry, embedded)
+	return service.NewInitService(registry, source)
 }
 
 // pickTemplate shows an interactive template picker. If only one template
