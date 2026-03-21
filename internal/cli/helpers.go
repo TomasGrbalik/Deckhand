@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -112,4 +114,45 @@ func mapContainerInfos(infos []docker.ContainerInfo) []domain.Container {
 // dirName returns the base name of the given directory path.
 func dirName(dir string) string {
 	return filepath.Base(dir)
+}
+
+// compositeSource tries multiple TemplateSource implementations in order.
+// The first source that succeeds wins. This lets user templates on disk
+// override embedded templates for Load/LoadMeta operations.
+type compositeSource struct {
+	sources []service.TemplateSource
+}
+
+// Load implements service.TemplateSource. It only falls back to the next source
+// when the error indicates the template was not found (fs.ErrNotExist). Real
+// read/parse errors are returned immediately so broken overrides surface.
+func (c *compositeSource) Load(name string) (string, string, error) {
+	var lastErr error
+	for _, src := range c.sources {
+		df, comp, err := src.Load(name)
+		if err == nil {
+			return df, comp, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", "", err
+		}
+		lastErr = err
+	}
+	return "", "", lastErr
+}
+
+// LoadMeta implements service.TemplateSource. Same fallback semantics as Load.
+func (c *compositeSource) LoadMeta(name string) (*domain.TemplateMeta, error) {
+	var lastErr error
+	for _, src := range c.sources {
+		meta, err := src.LoadMeta(name)
+		if err == nil {
+			return meta, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }
