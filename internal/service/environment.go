@@ -42,11 +42,13 @@ type VolumeManager interface {
 // EnvironmentService orchestrates the full dev container lifecycle.
 // CLI commands call Up, Down, and Destroy through this service.
 type EnvironmentService struct {
-	templates  TemplateSource
-	compose    ComposeRunner
-	volumes    VolumeManager
-	project    domain.Project
-	projectDir string
+	templates    TemplateSource
+	compose      ComposeRunner
+	volumes      VolumeManager
+	project      domain.Project
+	globalConfig domain.GlobalConfig
+	projectDir   string
+	logger       func(format string, args ...any)
 }
 
 // NewEnvironmentService creates an EnvironmentService.
@@ -56,22 +58,58 @@ func NewEnvironmentService(
 	templates TemplateSource,
 	compose ComposeRunner,
 	volumes VolumeManager,
+	globalConfig domain.GlobalConfig,
 	project domain.Project,
 	projectDir string,
 ) *EnvironmentService {
 	return &EnvironmentService{
-		templates:  templates,
-		compose:    compose,
-		volumes:    volumes,
-		project:    project,
-		projectDir: projectDir,
+		templates:    templates,
+		compose:      compose,
+		volumes:      volumes,
+		globalConfig: globalConfig,
+		project:      project,
+		projectDir:   projectDir,
+	}
+}
+
+// SetLogger configures a function used to log warnings (e.g., skipped mounts).
+// If not set, warnings are silently discarded.
+func (s *EnvironmentService) SetLogger(fn func(format string, args ...any)) {
+	s.logger = fn
+}
+
+func (s *EnvironmentService) logf(format string, args ...any) {
+	if s.logger != nil {
+		s.logger(format, args...)
 	}
 }
 
 // Up renders templates, writes them to .deckhand/, and starts containers.
+// It loads template metadata to extract default mounts, then merges
+// template → global → project mounts before rendering.
 func (s *EnvironmentService) Up(build bool) error {
 	tmplSvc := NewTemplateService(s.templates)
-	resolved, _ := MergeMounts(domain.Mounts{}, domain.Mounts{}, s.project.Mounts)
+
+	// Load template metadata to get default mounts (e.g., workspace volume).
+	templateName := s.project.Template
+	if templateName == "" {
+		templateName = "base"
+	}
+	meta, err := s.templates.LoadMeta(templateName)
+	if err != nil {
+		return fmt.Errorf("loading template metadata: %w", err)
+	}
+
+	templateMounts := domain.Mounts{}
+	if meta != nil {
+		templateMounts = meta.Mounts
+	}
+
+	resolved, warnings := MergeMounts(templateMounts, s.globalConfig.Mounts, s.project.Mounts)
+	for _, w := range warnings {
+		s.logf("warning: %s", w)
+	}
+
 	out, err := tmplSvc.Render(s.project, resolved)
 	if err != nil {
 		return fmt.Errorf("rendering templates: %w", err)
