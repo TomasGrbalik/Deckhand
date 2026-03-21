@@ -8,6 +8,7 @@ type Project struct {
 	Ports     []PortMapping     `yaml:"ports"`
 	Env       map[string]string `yaml:"env"`
 	Variables map[string]string `yaml:"variables,omitempty"`
+	Mounts    Mounts            `yaml:"mounts,omitempty"`
 }
 
 // TemplateVariable describes a single configurable variable in a template.
@@ -21,6 +22,7 @@ type TemplateMeta struct {
 	Name        string                      `yaml:"name"`
 	Description string                      `yaml:"description"`
 	Variables   map[string]TemplateVariable `yaml:"variables"`
+	Mounts      Mounts                      `yaml:"mounts,omitempty"`
 }
 
 // TemplateInfo describes a discovered template for listing purposes.
