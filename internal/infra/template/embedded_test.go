@@ -222,7 +222,8 @@ func TestRender_PythonComposeWithPorts(t *testing.T) {
 		"DO NOT EDIT",
 		"dev.deckhand.managed",
 		`dev.deckhand.project: "myapp"`,
-		"..:/workspace",
+		"context: .",
+		"dockerfile: Dockerfile",
 		"127.0.0.1:8000:8000",
 		"sleep infinity",
 	}
@@ -239,11 +240,36 @@ func TestRender_PythonComposeWithPorts(t *testing.T) {
 	}
 }
 
+// VolumeEntry mirrors the service layer's VolumeEntry for template rendering.
+type VolumeEntry struct {
+	entry string
+}
+
+// ComposeEntry returns the compose-format volume string.
+func (v VolumeEntry) ComposeEntry() string {
+	return v.entry
+}
+
+// EnvEntry mirrors the service layer's EnvEntry for template rendering.
+type EnvEntry struct {
+	Key   string
+	Value string
+}
+
+// NamedVolumeEntry mirrors the service layer's NamedVolumeEntry.
+type NamedVolumeEntry struct {
+	ComposeName string
+	MountName   string
+}
+
 // templateData mirrors the data passed to compose templates during rendering.
 // ExposedPorts contains only non-internal ports from domain.Project.
 type templateData struct {
 	domain.Project
 	ExposedPorts []domain.PortMapping
+	Volumes      []VolumeEntry
+	Environment  []EnvEntry
+	NamedVolumes []NamedVolumeEntry
 }
 
 // renderCompose is a test helper that loads, parses, and executes a
@@ -290,7 +316,8 @@ func TestRender_ComposeWithPorts(t *testing.T) {
 		"Source: .deckhand.yaml",
 		"Regenerate with: deckhand up",
 		"devcontainer",
-		"..:/workspace",
+		"context: .",
+		"dockerfile: Dockerfile",
 		"127.0.0.1:8080:8080",
 		"127.0.0.1:3000:3000",
 		"sleep infinity",

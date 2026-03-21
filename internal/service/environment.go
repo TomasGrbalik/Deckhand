@@ -54,7 +54,8 @@ func NewEnvironmentService(
 // Up renders templates, writes them to .deckhand/, and starts containers.
 func (s *EnvironmentService) Up(build bool) error {
 	tmplSvc := NewTemplateService(s.templates)
-	out, err := tmplSvc.Render(s.project)
+	resolved, _ := MergeMounts(domain.Mounts{}, domain.Mounts{}, s.project.Mounts)
+	out, err := tmplSvc.Render(s.project, resolved)
 	if err != nil {
 		return fmt.Errorf("rendering templates: %w", err)
 	}
