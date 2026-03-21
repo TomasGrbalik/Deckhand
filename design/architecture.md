@@ -178,4 +178,3 @@ The user's `.deckhand.yaml` stays in the project root and is the only file they 
 
 - **SSH host for `connect` command** — How does deckhand know the server's Tailscale IP? Global config? Auto-detect via `tailscale status`? Flag? Deferred for now.
 - **Template inheritance** — Base templates that language templates extend. The mechanism (Go template blocks vs file overlay) needs design when we build the template system.
-- **Credential injection** — The exact mounts and env vars for SSH agent, GPG, GitHub token. Needs its own design doc when we reach that phase.
