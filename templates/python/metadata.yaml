@@ -1,0 +1,6 @@
+name: python
+description: Python dev container with pip, pyright, and debugpy
+variables:
+  python_version:
+    default: "3.12"
+    description: Python version to install

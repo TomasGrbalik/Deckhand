@@ -85,6 +85,160 @@ func TestLoad_DockerfileContent(t *testing.T) {
 	}
 }
 
+func TestLoadMeta_PythonTemplate(t *testing.T) {
+	meta, err := tmpl.LoadMeta("python")
+	if err != nil {
+		t.Fatalf("LoadMeta(\"python\") returned error: %v", err)
+	}
+
+	if meta.Name != "python" {
+		t.Errorf("Name = %q, want %q", meta.Name, "python")
+	}
+	if meta.Description == "" {
+		t.Error("Description should not be empty")
+	}
+	v, ok := meta.Variables["python_version"]
+	if !ok {
+		t.Fatal("Variables missing \"python_version\"")
+	}
+	if v.Default != "3.12" {
+		t.Errorf("python_version default = %q, want %q", v.Default, "3.12")
+	}
+}
+
+func TestLoad_PythonTemplate(t *testing.T) {
+	dockerfile, compose, err := tmpl.Load("python")
+	if err != nil {
+		t.Fatalf("Load(\"python\") returned error: %v", err)
+	}
+
+	if dockerfile == "" {
+		t.Error("Dockerfile template is empty")
+	}
+	if compose == "" {
+		t.Error("compose template is empty")
+	}
+}
+
+func TestLoad_PythonDockerfileContent(t *testing.T) {
+	dockerfile, _, err := tmpl.Load("python")
+	if err != nil {
+		t.Fatalf("Load(\"python\") returned error: %v", err)
+	}
+
+	checks := []string{
+		"DO NOT EDIT",
+		"Source: .deckhand.yaml",
+		"Regenerate with: deckhand up",
+		"python:{{ .Vars.python_version }}-slim",
+		"pyright",
+		"debugpy",
+		"git",
+		"/workspace",
+		"USER dev",
+	}
+
+	for _, want := range checks {
+		if !strings.Contains(dockerfile, want) {
+			t.Errorf("Python Dockerfile missing %q", want)
+		}
+	}
+}
+
+func TestRender_PythonDockerfileDefaults(t *testing.T) {
+	dockerfile, _, err := tmpl.Load("python")
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+
+	parsed, err := template.New("dockerfile").Parse(dockerfile)
+	if err != nil {
+		t.Fatalf("template parse error: %v", err)
+	}
+
+	data := struct {
+		Vars map[string]string
+	}{
+		Vars: map[string]string{"python_version": "3.12"},
+	}
+
+	var buf strings.Builder
+	if err := parsed.Execute(&buf, data); err != nil {
+		t.Fatalf("template execute error: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "python:3.12-slim") {
+		t.Errorf("rendered Dockerfile missing python:3.12-slim\nGot:\n%s", output)
+	}
+}
+
+func TestRender_PythonDockerfileCustomVersion(t *testing.T) {
+	dockerfile, _, err := tmpl.Load("python")
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+
+	parsed, err := template.New("dockerfile").Parse(dockerfile)
+	if err != nil {
+		t.Fatalf("template parse error: %v", err)
+	}
+
+	data := struct {
+		Vars map[string]string
+	}{
+		Vars: map[string]string{"python_version": "3.11"},
+	}
+
+	var buf strings.Builder
+	if err := parsed.Execute(&buf, data); err != nil {
+		t.Fatalf("template execute error: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "python:3.11-slim") {
+		t.Errorf("rendered Dockerfile missing python:3.11-slim\nGot:\n%s", output)
+	}
+	if strings.Contains(output, "3.12") {
+		t.Errorf("rendered Dockerfile should not contain default version 3.12 when overridden\nGot:\n%s", output)
+	}
+}
+
+func TestRender_PythonComposeWithPorts(t *testing.T) {
+	output := renderCompose(t, "python", templateData{
+		Project: domain.Project{
+			Name:     "myapp",
+			Template: "python",
+			Ports: []domain.PortMapping{
+				{Port: 8000, Name: "web"},
+			},
+		},
+		ExposedPorts: []domain.PortMapping{
+			{Port: 8000, Name: "web"},
+		},
+	})
+
+	checks := []string{
+		"DO NOT EDIT",
+		"dev.deckhand.managed",
+		`dev.deckhand.project: "myapp"`,
+		"..:/workspace",
+		"127.0.0.1:8000:8000",
+		"sleep infinity",
+	}
+
+	for _, want := range checks {
+		if !strings.Contains(output, want) {
+			t.Errorf("python compose output missing %q\nGot:\n%s", want, output)
+		}
+	}
+
+	var parsed map[string]any
+	if err := yaml.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Errorf("rendered compose is not valid YAML: %v\nGot:\n%s", err, output)
+	}
+}
+
 // templateData mirrors the data passed to compose templates during rendering.
 // ExposedPorts contains only non-internal ports from domain.Project.
 type templateData struct {
@@ -92,12 +246,12 @@ type templateData struct {
 	ExposedPorts []domain.PortMapping
 }
 
-// renderCompose is a test helper that loads, parses, and executes the base
+// renderCompose is a test helper that loads, parses, and executes a
 // compose template with the given data.
-func renderCompose(t *testing.T, data templateData) string {
+func renderCompose(t *testing.T, templateName string, data templateData) string {
 	t.Helper()
 
-	_, composeTmpl, err := tmpl.Load("base")
+	_, composeTmpl, err := tmpl.Load(templateName)
 	if err != nil {
 		t.Fatalf("Load error: %v", err)
 	}
@@ -116,7 +270,7 @@ func renderCompose(t *testing.T, data templateData) string {
 }
 
 func TestRender_ComposeWithPorts(t *testing.T) {
-	output := renderCompose(t, templateData{
+	output := renderCompose(t, "base", templateData{
 		Project: domain.Project{
 			Name:     "myapp",
 			Template: "base",
@@ -155,7 +309,7 @@ func TestRender_ComposeWithPorts(t *testing.T) {
 }
 
 func TestRender_ComposeWithNoPorts(t *testing.T) {
-	output := renderCompose(t, templateData{
+	output := renderCompose(t, "base", templateData{
 		Project: domain.Project{
 			Name:     "myapp",
 			Template: "base",

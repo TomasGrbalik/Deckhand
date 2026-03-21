@@ -6,5 +6,5 @@ import "embed"
 // Each subdirectory is a template with metadata.yaml, Dockerfile.tmpl,
 // and compose.yaml.tmpl.
 //
-//go:embed all:base
+//go:embed all:base all:python
 var FS embed.FS
