@@ -28,6 +28,48 @@ func TestLoadMeta_BaseTemplate(t *testing.T) {
 	}
 }
 
+func TestLoadMeta_BaseTemplateDeclaresWorkspaceVolume(t *testing.T) {
+	meta, err := tmpl.LoadMeta("base")
+	if err != nil {
+		t.Fatalf("LoadMeta(\"base\") returned error: %v", err)
+	}
+
+	if len(meta.Mounts.Volumes) == 0 {
+		t.Fatal("base template should declare at least one volume mount")
+	}
+	found := false
+	for _, v := range meta.Mounts.Volumes {
+		if v.Name == "workspace" && v.Target == "/workspace" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("base template should declare workspace volume with target /workspace, got %+v", meta.Mounts.Volumes)
+	}
+}
+
+func TestLoadMeta_PythonTemplateDeclaresWorkspaceVolume(t *testing.T) {
+	meta, err := tmpl.LoadMeta("python")
+	if err != nil {
+		t.Fatalf("LoadMeta(\"python\") returned error: %v", err)
+	}
+
+	if len(meta.Mounts.Volumes) == 0 {
+		t.Fatal("python template should declare at least one volume mount")
+	}
+	found := false
+	for _, v := range meta.Mounts.Volumes {
+		if v.Name == "workspace" && v.Target == "/workspace" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("python template should declare workspace volume with target /workspace, got %+v", meta.Mounts.Volumes)
+	}
+}
+
 func TestLoadMeta_NonexistentTemplate(t *testing.T) {
 	_, err := tmpl.LoadMeta("nonexistent")
 	if err == nil {

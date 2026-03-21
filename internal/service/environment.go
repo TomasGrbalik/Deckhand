@@ -26,26 +26,43 @@ type ComposeRunner interface {
 	Destroy(projectDir, composePath string) error
 }
 
+// VolumeInfo holds metadata about a discovered Docker volume.
+type VolumeInfo struct {
+	Name string
+	Size int64 // size in bytes, -1 if unknown
+}
+
+// VolumeManager lists and removes Docker volumes by label. Used by Destroy
+// to clean up named volumes created by deckhand.
+type VolumeManager interface {
+	ListByProject(projectName string) ([]VolumeInfo, error)
+	Remove(volumeName string) error
+}
+
 // EnvironmentService orchestrates the full dev container lifecycle.
 // CLI commands call Up, Down, and Destroy through this service.
 type EnvironmentService struct {
 	templates  TemplateSource
 	compose    ComposeRunner
+	volumes    VolumeManager
 	project    domain.Project
 	projectDir string
 }
 
 // NewEnvironmentService creates an EnvironmentService.
 // projectDir is the root directory containing .deckhand.yaml.
+// volumes may be nil — if nil, Destroy skips volume cleanup.
 func NewEnvironmentService(
 	templates TemplateSource,
 	compose ComposeRunner,
+	volumes VolumeManager,
 	project domain.Project,
 	projectDir string,
 ) *EnvironmentService {
 	return &EnvironmentService{
 		templates:  templates,
 		compose:    compose,
+		volumes:    volumes,
 		project:    project,
 		projectDir: projectDir,
 	}
@@ -109,17 +126,42 @@ func (s *EnvironmentService) Down() error {
 	return nil
 }
 
-// Destroy stops containers and removes the .deckhand/ directory.
+// ProjectVolumes returns the list of deckhand-managed volumes for this project.
+// The CLI uses this to display volume names in the destroy confirmation prompt.
+// Returns nil if no VolumeManager is configured.
+func (s *EnvironmentService) ProjectVolumes() ([]VolumeInfo, error) {
+	if s.volumes == nil {
+		return nil, nil
+	}
+	return s.volumes.ListByProject(s.project.Name)
+}
+
+// Destroy stops containers, removes labeled volumes, and deletes the
+// .deckhand/ directory. If the compose file is missing, volume cleanup
+// and directory removal still proceed.
 func (s *EnvironmentService) Destroy() error {
 	composePath, err := s.composePath()
 	if err != nil {
-		if errors.Is(err, ErrNoEnvironment) {
-			return nil // nothing to destroy
+		if !errors.Is(err, ErrNoEnvironment) {
+			return err
 		}
-		return err
+	} else {
+		if err := s.compose.Destroy(s.projectDir, composePath); err != nil {
+			return fmt.Errorf("compose destroy: %w", err)
+		}
 	}
-	if err := s.compose.Destroy(s.projectDir, composePath); err != nil {
-		return fmt.Errorf("compose destroy: %w", err)
+
+	// Remove named volumes discovered by label.
+	if s.volumes != nil {
+		vols, err := s.volumes.ListByProject(s.project.Name)
+		if err != nil {
+			return fmt.Errorf("listing project volumes: %w", err)
+		}
+		for _, v := range vols {
+			if err := s.volumes.Remove(v.Name); err != nil {
+				return fmt.Errorf("removing volume %q: %w", v.Name, err)
+			}
+		}
 	}
 
 	outDir := filepath.Join(s.projectDir, deckhandDir)

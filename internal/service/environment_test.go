@@ -42,6 +42,25 @@ func (f *spyCompose) Destroy(projectDir, composePath string) error {
 	return f.destroyErr
 }
 
+// spyVolumeManager records calls to VolumeManager methods.
+type spyVolumeManager struct {
+	listResult     []service.VolumeInfo
+	listErr        error
+	listedProjects []string
+	removed        []string
+	removeErr      error
+}
+
+func (f *spyVolumeManager) ListByProject(project string) ([]service.VolumeInfo, error) {
+	f.listedProjects = append(f.listedProjects, project)
+	return f.listResult, f.listErr
+}
+
+func (f *spyVolumeManager) Remove(name string) error {
+	f.removed = append(f.removed, name)
+	return f.removeErr
+}
+
 func newTestEnv(t *testing.T) (*service.EnvironmentService, *spyCompose, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -52,7 +71,7 @@ func newTestEnv(t *testing.T) (*service.EnvironmentService, *spyCompose, string)
 		Template: "base",
 		Ports:    []domain.PortMapping{{Port: 8080}},
 	}
-	svc := service.NewEnvironmentService(source, compose, project, dir)
+	svc := service.NewEnvironmentService(source, compose, nil, project, dir)
 	return svc, compose, dir
 }
 
@@ -232,6 +251,37 @@ func TestDestroy_MissingDeckhandDir(t *testing.T) {
 	}
 }
 
+func TestDestroy_MissingComposeFileStillCleansUpVolumes(t *testing.T) {
+	dir := t.TempDir()
+	source := newFakeSource()
+	compose := &spyCompose{}
+	volMgr := &spyVolumeManager{
+		listResult: []service.VolumeInfo{
+			{Name: "myapp-workspace"},
+		},
+	}
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc := service.NewEnvironmentService(source, compose, volMgr, project, dir)
+
+	// No Up() call — .deckhand/ doesn't exist.
+	if err := svc.Destroy(); err != nil {
+		t.Fatalf("Destroy() error: %v", err)
+	}
+
+	// Compose destroy should NOT be called (no compose file).
+	if len(compose.destroyCalls) != 0 {
+		t.Errorf("expected 0 Destroy calls, got %d", len(compose.destroyCalls))
+	}
+
+	// Volumes should still be removed.
+	if len(volMgr.removed) != 1 {
+		t.Fatalf("expected 1 volume removed, got %d", len(volMgr.removed))
+	}
+	if volMgr.removed[0] != "myapp-workspace" {
+		t.Errorf("expected removed volume myapp-workspace, got %s", volMgr.removed[0])
+	}
+}
+
 func TestDown_ComposeError(t *testing.T) {
 	svc, _, dir := newTestEnv(t)
 
@@ -244,7 +294,7 @@ func TestDown_ComposeError(t *testing.T) {
 	source := newFakeSource()
 	compose := &spyCompose{downErr: errors.New("down failed")}
 	project := domain.Project{Name: "myapp", Template: "base"}
-	svc = service.NewEnvironmentService(source, compose, project, dir)
+	svc = service.NewEnvironmentService(source, compose, nil, project, dir)
 
 	err := svc.Down()
 	if err == nil {
@@ -270,7 +320,7 @@ func TestUp_TemplateRenderingFails(t *testing.T) {
 	source := &fakeSource{err: errors.New("template broken")}
 	compose := &spyCompose{}
 	project := domain.Project{Name: "myapp", Template: "base"}
-	svc := service.NewEnvironmentService(source, compose, project, dir)
+	svc := service.NewEnvironmentService(source, compose, nil, project, dir)
 
 	err := svc.Up(false)
 	if err == nil {
@@ -296,7 +346,7 @@ func TestUp_ComposeUpFails(t *testing.T) {
 	source := newFakeSource()
 	compose := &spyCompose{upErr: errors.New("compose failed")}
 	project := domain.Project{Name: "myapp", Template: "base"}
-	svc := service.NewEnvironmentService(source, compose, project, dir)
+	svc := service.NewEnvironmentService(source, compose, nil, project, dir)
 
 	err := svc.Up(false)
 	if err == nil {
@@ -309,5 +359,141 @@ func TestUp_ComposeUpFails(t *testing.T) {
 	// Files should remain (no cleanup on failure).
 	if _, statErr := os.Stat(filepath.Join(dir, ".deckhand", "Dockerfile")); statErr != nil {
 		t.Error("Dockerfile should remain after compose failure")
+	}
+}
+
+func TestDestroy_RemovesLabeledVolumes(t *testing.T) {
+	dir := t.TempDir()
+	source := newFakeSource()
+	compose := &spyCompose{}
+	volMgr := &spyVolumeManager{
+		listResult: []service.VolumeInfo{
+			{Name: "myapp-workspace"},
+			{Name: "myapp-cache"},
+		},
+	}
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc := service.NewEnvironmentService(source, compose, volMgr, project, dir)
+
+	// Create files via Up first.
+	if err := svc.Up(false); err != nil {
+		t.Fatalf("Up() error: %v", err)
+	}
+
+	if err := svc.Destroy(); err != nil {
+		t.Fatalf("Destroy() error: %v", err)
+	}
+
+	// Verify compose destroy was called.
+	if len(compose.destroyCalls) != 1 {
+		t.Fatalf("expected 1 Destroy call, got %d", len(compose.destroyCalls))
+	}
+
+	// Verify volumes were listed for the correct project.
+	if len(volMgr.listedProjects) != 1 || volMgr.listedProjects[0] != "myapp" {
+		t.Errorf("expected ListByProject called with 'myapp', got %v", volMgr.listedProjects)
+	}
+
+	// Verify volumes were removed.
+	if len(volMgr.removed) != 2 {
+		t.Fatalf("expected 2 volumes removed, got %d", len(volMgr.removed))
+	}
+	if volMgr.removed[0] != "myapp-workspace" {
+		t.Errorf("expected first removed volume myapp-workspace, got %s", volMgr.removed[0])
+	}
+	if volMgr.removed[1] != "myapp-cache" {
+		t.Errorf("expected second removed volume myapp-cache, got %s", volMgr.removed[1])
+	}
+
+	// Verify .deckhand/ was removed.
+	if _, err := os.Stat(filepath.Join(dir, ".deckhand")); !os.IsNotExist(err) {
+		t.Error(".deckhand/ should be removed after Destroy")
+	}
+}
+
+func TestDestroy_NilVolumeManagerSkipsVolumeCleanup(t *testing.T) {
+	svc, compose, dir := newTestEnv(t)
+
+	if err := svc.Up(false); err != nil {
+		t.Fatalf("Up() error: %v", err)
+	}
+
+	// Destroy with nil volume manager should still succeed.
+	if err := svc.Destroy(); err != nil {
+		t.Fatalf("Destroy() error: %v", err)
+	}
+
+	if len(compose.destroyCalls) != 1 {
+		t.Fatalf("expected 1 Destroy call, got %d", len(compose.destroyCalls))
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".deckhand")); !os.IsNotExist(err) {
+		t.Error(".deckhand/ should be removed after Destroy")
+	}
+}
+
+func TestProjectVolumes_ReturnsVolumes(t *testing.T) {
+	dir := t.TempDir()
+	source := newFakeSource()
+	compose := &spyCompose{}
+	volMgr := &spyVolumeManager{
+		listResult: []service.VolumeInfo{
+			{Name: "myapp-workspace"},
+		},
+	}
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc := service.NewEnvironmentService(source, compose, volMgr, project, dir)
+
+	vols, err := svc.ProjectVolumes()
+	if err != nil {
+		t.Fatalf("ProjectVolumes() error: %v", err)
+	}
+	if len(vols) != 1 {
+		t.Fatalf("expected 1 volume, got %d", len(vols))
+	}
+	if vols[0].Name != "myapp-workspace" {
+		t.Errorf("expected volume name myapp-workspace, got %s", vols[0].Name)
+	}
+}
+
+func TestProjectVolumes_NilVolumeManager(t *testing.T) {
+	svc, _, _ := newTestEnv(t)
+
+	vols, err := svc.ProjectVolumes()
+	if err != nil {
+		t.Fatalf("ProjectVolumes() error: %v", err)
+	}
+	if vols != nil {
+		t.Errorf("expected nil volumes with nil manager, got %v", vols)
+	}
+}
+
+func TestDown_DoesNotRemoveVolumes(t *testing.T) {
+	dir := t.TempDir()
+	source := newFakeSource()
+	compose := &spyCompose{}
+	volMgr := &spyVolumeManager{
+		listResult: []service.VolumeInfo{
+			{Name: "myapp-workspace"},
+		},
+	}
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc := service.NewEnvironmentService(source, compose, volMgr, project, dir)
+
+	// Create files via Up.
+	if err := svc.Up(false); err != nil {
+		t.Fatalf("Up() error: %v", err)
+	}
+
+	if err := svc.Down(); err != nil {
+		t.Fatalf("Down() error: %v", err)
+	}
+
+	// Verify Down was called (not Destroy).
+	if len(compose.downCalls) != 1 {
+		t.Fatalf("expected 1 Down call, got %d", len(compose.downCalls))
+	}
+	// Verify no volumes were removed.
+	if len(volMgr.removed) != 0 {
+		t.Errorf("Down should not remove volumes, but removed %v", volMgr.removed)
 	}
 }

@@ -1,3 +1,7 @@
 name: base
 description: Minimal Ubuntu dev container with common tools
 variables: {}
+mounts:
+  volumes:
+    - name: workspace
+      target: /workspace

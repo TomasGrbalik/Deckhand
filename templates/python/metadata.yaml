@@ -4,3 +4,7 @@ variables:
   python_version:
     default: "3.12"
     description: Python version to install
+mounts:
+  volumes:
+    - name: workspace
+      target: /workspace
