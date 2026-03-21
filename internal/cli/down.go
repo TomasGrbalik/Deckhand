@@ -21,10 +21,7 @@ func newDownCmd() *cobra.Command {
 				return err
 			}
 
-			svc, err := newEnvironmentService(*proj, dir)
-			if err != nil {
-				return err
-			}
+			svc := newEnvironmentServiceForDown(*proj, dir)
 
 			if err := svc.Down(); err != nil {
 				return fmt.Errorf("stopping environment: %w", err)

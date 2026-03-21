@@ -34,6 +34,11 @@ func loadProject(dir string) (*domain.Project, error) {
 	return proj, nil
 }
 
+// stderrLogger is a logger that writes to stderr.
+func stderrLogger(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+}
+
 // newEnvironmentService creates an EnvironmentService wired to real infra.
 // It loads the global config for mount merging during Up.
 func newEnvironmentService(proj domain.Project, dir string) (*service.EnvironmentService, error) {
@@ -41,14 +46,29 @@ func newEnvironmentService(proj domain.Project, dir string) (*service.Environmen
 	if err != nil {
 		return nil, err
 	}
-	return service.NewEnvironmentService(
+	svc := service.NewEnvironmentService(
 		&template.EmbeddedSource{},
 		docker.NewCompose(),
 		nil, // no volume manager — commands that need it create one explicitly
 		globalCfg,
 		proj,
 		dir,
-	), nil
+	)
+	svc.SetLogger(stderrLogger)
+	return svc, nil
+}
+
+// newEnvironmentServiceForDown creates a lightweight EnvironmentService for
+// down/status commands that don't need global config or mount merging.
+func newEnvironmentServiceForDown(proj domain.Project, dir string) *service.EnvironmentService {
+	return service.NewEnvironmentService(
+		&template.EmbeddedSource{},
+		docker.NewCompose(),
+		nil,
+		domain.GlobalConfig{},
+		proj,
+		dir,
+	)
 }
 
 // loadGlobalConfig loads the global config. Returns an empty config if the
@@ -68,7 +88,7 @@ func loadGlobalConfig() (domain.GlobalConfig, error) {
 
 // newEnvironmentServiceWithVolumes creates an EnvironmentService with volume
 // management support. Used by destroy which needs to discover and remove
-// labeled volumes.
+// labeled volumes. Does not load global config — destroy doesn't use mounts.
 func newEnvironmentServiceWithVolumes(proj domain.Project, dir string) (*service.EnvironmentService, func(), error) {
 	client, err := docker.NewClient()
 	if err != nil {
@@ -77,19 +97,15 @@ func newEnvironmentServiceWithVolumes(proj domain.Project, dir string) (*service
 	cleanup := func() { _ = client.Close() }
 
 	volMgr := newVolumeListerAdapter(docker.NewVolume(client.API()))
-	globalCfg, err := loadGlobalConfig()
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
 	svc := service.NewEnvironmentService(
 		&template.EmbeddedSource{},
 		docker.NewCompose(),
 		volMgr,
-		globalCfg,
+		domain.GlobalConfig{},
 		proj,
 		dir,
 	)
+	svc.SetLogger(stderrLogger)
 	return svc, cleanup, nil
 }
 
