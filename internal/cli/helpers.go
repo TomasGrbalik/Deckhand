@@ -36,8 +36,11 @@ func loadProject(dir string) (*domain.Project, error) {
 
 // newEnvironmentService creates an EnvironmentService wired to real infra.
 // It loads the global config for mount merging during Up.
-func newEnvironmentService(proj domain.Project, dir string) *service.EnvironmentService {
-	globalCfg := loadGlobalConfigOrEmpty()
+func newEnvironmentService(proj domain.Project, dir string) (*service.EnvironmentService, error) {
+	globalCfg, err := loadGlobalConfig()
+	if err != nil {
+		return nil, err
+	}
 	return service.NewEnvironmentService(
 		&template.EmbeddedSource{},
 		docker.NewCompose(),
@@ -45,21 +48,22 @@ func newEnvironmentService(proj domain.Project, dir string) *service.Environment
 		globalCfg,
 		proj,
 		dir,
-	)
+	), nil
 }
 
-// loadGlobalConfigOrEmpty loads the global config, returning an empty config
-// if the file doesn't exist or the path can't be resolved.
-func loadGlobalConfigOrEmpty() domain.GlobalConfig {
-	path, err := config.GlobalConfigPath()
-	if err != nil {
-		return domain.GlobalConfig{}
+// loadGlobalConfig loads the global config. Returns an empty config if the
+// file doesn't exist or the config dir can't be resolved. Returns an error
+// for real failures (e.g., malformed YAML).
+func loadGlobalConfig() (domain.GlobalConfig, error) {
+	path, pathErr := config.GlobalConfigPath()
+	if pathErr != nil {
+		return domain.GlobalConfig{}, nil //nolint:nilerr // path resolution non-fatal (e.g., no home dir)
 	}
 	cfg, err := config.LoadGlobal(path)
 	if err != nil {
-		return domain.GlobalConfig{}
+		return domain.GlobalConfig{}, fmt.Errorf("loading global config: %w", err)
 	}
-	return *cfg
+	return *cfg, nil
 }
 
 // newEnvironmentServiceWithVolumes creates an EnvironmentService with volume
@@ -73,7 +77,11 @@ func newEnvironmentServiceWithVolumes(proj domain.Project, dir string) (*service
 	cleanup := func() { _ = client.Close() }
 
 	volMgr := newVolumeListerAdapter(docker.NewVolume(client.API()))
-	globalCfg := loadGlobalConfigOrEmpty()
+	globalCfg, err := loadGlobalConfig()
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	svc := service.NewEnvironmentService(
 		&template.EmbeddedSource{},
 		docker.NewCompose(),
@@ -229,8 +237,13 @@ func (c *compositeSource) LoadMeta(name string) (*domain.TemplateMeta, error) {
 
 // displayGlobalMountSummary prints an informational summary of active global
 // mounts. If no global config exists or it has no mounts, nothing is printed.
+// Config load errors are printed as warnings rather than failing init.
 func displayGlobalMountSummary(w io.Writer) {
-	cfg := loadGlobalConfigOrEmpty()
+	cfg, err := loadGlobalConfig()
+	if err != nil {
+		fmt.Fprintf(w, "warning: %s\n", err)
+		return
+	}
 
 	var entries []string
 	for _, v := range cfg.Mounts.Volumes {

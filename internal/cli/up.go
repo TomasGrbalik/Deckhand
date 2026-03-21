@@ -23,7 +23,10 @@ func newUpCmd() *cobra.Command {
 				return err
 			}
 
-			svc := newEnvironmentService(*proj, dir)
+			svc, err := newEnvironmentService(*proj, dir)
+			if err != nil {
+				return err
+			}
 			svc.SetLogger(func(format string, args ...any) {
 				fmt.Fprintf(cmd.ErrOrStderr(), format+"\n", args...)
 			})
