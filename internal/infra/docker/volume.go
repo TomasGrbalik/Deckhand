@@ -12,6 +12,7 @@ import (
 // VolumeInfo holds metadata about a Docker volume discovered by label.
 type VolumeInfo struct {
 	Name string
+	Size int64 // size in bytes, -1 if unknown
 }
 
 // Volume uses the Docker SDK to list and remove named volumes by label.
@@ -40,7 +41,11 @@ func (v *Volume) ListByProject(projectName string) ([]VolumeInfo, error) {
 
 	result := make([]VolumeInfo, 0, len(resp.Volumes))
 	for _, vol := range resp.Volumes {
-		result = append(result, VolumeInfo{Name: vol.Name})
+		size := int64(-1)
+		if vol.UsageData != nil {
+			size = vol.UsageData.Size
+		}
+		result = append(result, VolumeInfo{Name: vol.Name, Size: size})
 	}
 	return result, nil
 }

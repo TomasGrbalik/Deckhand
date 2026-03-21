@@ -29,6 +29,7 @@ type ComposeRunner interface {
 // VolumeInfo holds metadata about a discovered Docker volume.
 type VolumeInfo struct {
 	Name string
+	Size int64 // size in bytes, -1 if unknown
 }
 
 // VolumeManager lists and removes Docker volumes by label. Used by Destroy
@@ -136,17 +137,18 @@ func (s *EnvironmentService) ProjectVolumes() ([]VolumeInfo, error) {
 }
 
 // Destroy stops containers, removes labeled volumes, and deletes the
-// .deckhand/ directory.
+// .deckhand/ directory. If the compose file is missing, volume cleanup
+// and directory removal still proceed.
 func (s *EnvironmentService) Destroy() error {
 	composePath, err := s.composePath()
 	if err != nil {
-		if errors.Is(err, ErrNoEnvironment) {
-			return nil // nothing to destroy
+		if !errors.Is(err, ErrNoEnvironment) {
+			return err
 		}
-		return err
-	}
-	if err := s.compose.Destroy(s.projectDir, composePath); err != nil {
-		return fmt.Errorf("compose destroy: %w", err)
+	} else {
+		if err := s.compose.Destroy(s.projectDir, composePath); err != nil {
+			return fmt.Errorf("compose destroy: %w", err)
+		}
 	}
 
 	// Remove named volumes discovered by label.

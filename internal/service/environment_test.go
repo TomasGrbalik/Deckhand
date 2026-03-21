@@ -44,13 +44,15 @@ func (f *spyCompose) Destroy(projectDir, composePath string) error {
 
 // spyVolumeManager records calls to VolumeManager methods.
 type spyVolumeManager struct {
-	listResult []service.VolumeInfo
-	listErr    error
-	removed    []string
-	removeErr  error
+	listResult     []service.VolumeInfo
+	listErr        error
+	listedProjects []string
+	removed        []string
+	removeErr      error
 }
 
-func (f *spyVolumeManager) ListByProject(_ string) ([]service.VolumeInfo, error) {
+func (f *spyVolumeManager) ListByProject(project string) ([]service.VolumeInfo, error) {
+	f.listedProjects = append(f.listedProjects, project)
 	return f.listResult, f.listErr
 }
 
@@ -249,6 +251,37 @@ func TestDestroy_MissingDeckhandDir(t *testing.T) {
 	}
 }
 
+func TestDestroy_MissingComposeFileStillCleansUpVolumes(t *testing.T) {
+	dir := t.TempDir()
+	source := newFakeSource()
+	compose := &spyCompose{}
+	volMgr := &spyVolumeManager{
+		listResult: []service.VolumeInfo{
+			{Name: "myapp-workspace"},
+		},
+	}
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc := service.NewEnvironmentService(source, compose, volMgr, project, dir)
+
+	// No Up() call — .deckhand/ doesn't exist.
+	if err := svc.Destroy(); err != nil {
+		t.Fatalf("Destroy() error: %v", err)
+	}
+
+	// Compose destroy should NOT be called (no compose file).
+	if len(compose.destroyCalls) != 0 {
+		t.Errorf("expected 0 Destroy calls, got %d", len(compose.destroyCalls))
+	}
+
+	// Volumes should still be removed.
+	if len(volMgr.removed) != 1 {
+		t.Fatalf("expected 1 volume removed, got %d", len(volMgr.removed))
+	}
+	if volMgr.removed[0] != "myapp-workspace" {
+		t.Errorf("expected removed volume myapp-workspace, got %s", volMgr.removed[0])
+	}
+}
+
 func TestDown_ComposeError(t *testing.T) {
 	svc, _, dir := newTestEnv(t)
 
@@ -354,6 +387,11 @@ func TestDestroy_RemovesLabeledVolumes(t *testing.T) {
 	// Verify compose destroy was called.
 	if len(compose.destroyCalls) != 1 {
 		t.Fatalf("expected 1 Destroy call, got %d", len(compose.destroyCalls))
+	}
+
+	// Verify volumes were listed for the correct project.
+	if len(volMgr.listedProjects) != 1 || volMgr.listedProjects[0] != "myapp" {
+		t.Errorf("expected ListByProject called with 'myapp', got %v", volMgr.listedProjects)
 	}
 
 	// Verify volumes were removed.

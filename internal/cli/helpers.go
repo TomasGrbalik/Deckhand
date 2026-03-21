@@ -83,7 +83,7 @@ func (a *volumeListerAdapter) ListByProject(projectName string) ([]service.Volum
 	}
 	result := make([]service.VolumeInfo, len(infos))
 	for i, info := range infos {
-		result[i] = service.VolumeInfo{Name: info.Name}
+		result[i] = service.VolumeInfo{Name: info.Name, Size: info.Size}
 	}
 	return result, nil
 }

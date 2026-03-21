@@ -8,6 +8,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// formatVolumeEntry formats a volume name with its size for display.
+func formatVolumeEntry(name string, size int64) string {
+	if size < 0 {
+		return name
+	}
+	const (
+		kb = 1024
+		mb = kb * 1024
+		gb = mb * 1024
+	)
+	switch {
+	case size >= gb:
+		return fmt.Sprintf("%s (%.1f GB)", name, float64(size)/float64(gb))
+	case size >= mb:
+		return fmt.Sprintf("%s (%.1f MB)", name, float64(size)/float64(mb))
+	case size >= kb:
+		return fmt.Sprintf("%s (%.1f KB)", name, float64(size)/float64(kb))
+	default:
+		return fmt.Sprintf("%s (%d B)", name, size)
+	}
+}
+
 func newDestroyCmd() *cobra.Command {
 	var yes bool
 
@@ -40,12 +62,12 @@ func newDestroyCmd() *cobra.Command {
 
 				description := "This will stop all containers, remove volumes, and delete .deckhand/."
 				if len(vols) > 0 {
-					names := make([]string, len(vols))
+					entries := make([]string, len(vols))
 					for i, v := range vols {
-						names[i] = v.Name
+						entries[i] = formatVolumeEntry(v.Name, v.Size)
 					}
 					description = "This will stop all containers, delete .deckhand/, and remove volumes:\n  " +
-						strings.Join(names, "\n  ")
+						strings.Join(entries, "\n  ")
 				}
 
 				var confirmed bool

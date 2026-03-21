@@ -2,6 +2,7 @@ package docker_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	dockervolume "github.com/docker/docker/api/types/volume"
@@ -43,7 +44,7 @@ func TestVolume_ListAndRemove(t *testing.T) {
 	vol := docker.NewVolume(api)
 	ctx := context.Background()
 
-	projectName := "deckhand-test-vol"
+	projectName := "deckhand-test-vol-" + strings.ReplaceAll(t.Name(), "/", "-")
 	volName := projectName + "-workspace"
 
 	// Create a labeled volume via the Docker API directly.
