@@ -60,7 +60,7 @@ const fakeCompose = `services:
 {{- if .Environment }}
     environment:
 {{- range .Environment }}
-      {{ .Key }}: "{{ .Value }}"
+      {{ .Key }}: {{ printf "%q" .Value }}
 {{- end }}
 {{- end }}
     command: sleep infinity
