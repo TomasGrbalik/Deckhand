@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestGlobalConfigPath(t *testing.T) {
 		t.Fatal("GlobalConfigPath() returned empty string")
 	}
 	// Should end with the expected suffix regardless of platform.
-	wantSuffix := "deckhand/config.yaml"
+	wantSuffix := filepath.Join("deckhand", "config.yaml")
 	if !strings.HasSuffix(path, wantSuffix) {
 		t.Errorf("GlobalConfigPath() = %q, want suffix %q", path, wantSuffix)
 	}
