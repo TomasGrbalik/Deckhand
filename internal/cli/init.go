@@ -86,6 +86,10 @@ func newInitCmd() *cobra.Command {
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Created %s\n", cfgPath)
+
+			// Display global mount summary (informational only).
+			displayGlobalMountSummary(cmd.OutOrStdout())
+
 			return nil
 		},
 	}

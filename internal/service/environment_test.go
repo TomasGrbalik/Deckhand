@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,7 +72,7 @@ func newTestEnv(t *testing.T) (*service.EnvironmentService, *spyCompose, string)
 		Template: "base",
 		Ports:    []domain.PortMapping{{Port: 8080}},
 	}
-	svc := service.NewEnvironmentService(source, compose, nil, project, dir)
+	svc := service.NewEnvironmentService(source, compose, nil, domain.GlobalConfig{}, project, dir)
 	return svc, compose, dir
 }
 
@@ -261,7 +262,7 @@ func TestDestroy_MissingComposeFileStillCleansUpVolumes(t *testing.T) {
 		},
 	}
 	project := domain.Project{Name: "myapp", Template: "base"}
-	svc := service.NewEnvironmentService(source, compose, volMgr, project, dir)
+	svc := service.NewEnvironmentService(source, compose, volMgr, domain.GlobalConfig{}, project, dir)
 
 	// No Up() call — .deckhand/ doesn't exist.
 	if err := svc.Destroy(); err != nil {
@@ -294,7 +295,7 @@ func TestDown_ComposeError(t *testing.T) {
 	source := newFakeSource()
 	compose := &spyCompose{downErr: errors.New("down failed")}
 	project := domain.Project{Name: "myapp", Template: "base"}
-	svc = service.NewEnvironmentService(source, compose, nil, project, dir)
+	svc = service.NewEnvironmentService(source, compose, nil, domain.GlobalConfig{}, project, dir)
 
 	err := svc.Down()
 	if err == nil {
@@ -320,7 +321,7 @@ func TestUp_TemplateRenderingFails(t *testing.T) {
 	source := &fakeSource{err: errors.New("template broken")}
 	compose := &spyCompose{}
 	project := domain.Project{Name: "myapp", Template: "base"}
-	svc := service.NewEnvironmentService(source, compose, nil, project, dir)
+	svc := service.NewEnvironmentService(source, compose, nil, domain.GlobalConfig{}, project, dir)
 
 	err := svc.Up(false)
 	if err == nil {
@@ -346,7 +347,7 @@ func TestUp_ComposeUpFails(t *testing.T) {
 	source := newFakeSource()
 	compose := &spyCompose{upErr: errors.New("compose failed")}
 	project := domain.Project{Name: "myapp", Template: "base"}
-	svc := service.NewEnvironmentService(source, compose, nil, project, dir)
+	svc := service.NewEnvironmentService(source, compose, nil, domain.GlobalConfig{}, project, dir)
 
 	err := svc.Up(false)
 	if err == nil {
@@ -373,7 +374,7 @@ func TestDestroy_RemovesLabeledVolumes(t *testing.T) {
 		},
 	}
 	project := domain.Project{Name: "myapp", Template: "base"}
-	svc := service.NewEnvironmentService(source, compose, volMgr, project, dir)
+	svc := service.NewEnvironmentService(source, compose, volMgr, domain.GlobalConfig{}, project, dir)
 
 	// Create files via Up first.
 	if err := svc.Up(false); err != nil {
@@ -441,7 +442,7 @@ func TestProjectVolumes_ReturnsVolumes(t *testing.T) {
 		},
 	}
 	project := domain.Project{Name: "myapp", Template: "base"}
-	svc := service.NewEnvironmentService(source, compose, volMgr, project, dir)
+	svc := service.NewEnvironmentService(source, compose, volMgr, domain.GlobalConfig{}, project, dir)
 
 	vols, err := svc.ProjectVolumes()
 	if err != nil {
@@ -477,7 +478,7 @@ func TestDown_DoesNotRemoveVolumes(t *testing.T) {
 		},
 	}
 	project := domain.Project{Name: "myapp", Template: "base"}
-	svc := service.NewEnvironmentService(source, compose, volMgr, project, dir)
+	svc := service.NewEnvironmentService(source, compose, volMgr, domain.GlobalConfig{}, project, dir)
 
 	// Create files via Up.
 	if err := svc.Up(false); err != nil {
@@ -495,5 +496,134 @@ func TestDown_DoesNotRemoveVolumes(t *testing.T) {
 	// Verify no volumes were removed.
 	if len(volMgr.removed) != 0 {
 		t.Errorf("Down should not remove volumes, but removed %v", volMgr.removed)
+	}
+}
+
+func TestUp_MergesAllThreeMountSources(t *testing.T) {
+	t.Setenv("GH_TOKEN", "ghp_test123")
+
+	dir := t.TempDir()
+	source := &fakeSource{
+		dockerfile: fakeDockerfile,
+		compose:    fakeCompose,
+		meta: &domain.TemplateMeta{
+			Name: "base",
+			Mounts: domain.Mounts{
+				Volumes: []domain.VolumeMount{
+					{Name: "workspace", Target: "/workspace"},
+				},
+			},
+		},
+	}
+	compose := &spyCompose{}
+	globalCfg := domain.GlobalConfig{
+		Mounts: domain.Mounts{
+			Secrets: []domain.SecretMount{
+				{Name: "gh-token", Source: "${GH_TOKEN}", Env: "GH_TOKEN"},
+			},
+		},
+	}
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		Mounts: domain.Mounts{
+			Volumes: []domain.VolumeMount{
+				{Name: "go-cache", Target: "/home/dev/.cache/go"},
+			},
+		},
+	}
+	svc := service.NewEnvironmentService(source, compose, nil, globalCfg, project, dir)
+
+	if err := svc.Up(false); err != nil {
+		t.Fatalf("Up() error: %v", err)
+	}
+
+	// Read the generated compose file.
+	composeYAML, err := os.ReadFile(filepath.Join(dir, ".deckhand", "docker-compose.yml"))
+	if err != nil {
+		t.Fatalf("reading compose: %v", err)
+	}
+	content := string(composeYAML)
+
+	// Template default: workspace volume.
+	if !strings.Contains(content, "myapp-workspace:/workspace") {
+		t.Errorf("compose missing template workspace volume\nGot:\n%s", content)
+	}
+
+	// Global config: gh-token secret → environment variable.
+	if !strings.Contains(content, `GH_TOKEN: "ghp_test123"`) {
+		t.Errorf("compose missing global gh-token secret\nGot:\n%s", content)
+	}
+
+	// Project config: go-cache volume.
+	if !strings.Contains(content, "myapp-go-cache:/home/dev/.cache/go") {
+		t.Errorf("compose missing project go-cache volume\nGot:\n%s", content)
+	}
+}
+
+func TestUp_MissingGlobalConfig(t *testing.T) {
+	dir := t.TempDir()
+	source := newFakeSource()
+	compose := &spyCompose{}
+	// Empty global config — simulates missing file.
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc := service.NewEnvironmentService(source, compose, nil, domain.GlobalConfig{}, project, dir)
+
+	if err := svc.Up(false); err != nil {
+		t.Fatalf("Up() should succeed with empty global config: %v", err)
+	}
+
+	if len(compose.upCalls) != 1 {
+		t.Fatalf("expected 1 Up call, got %d", len(compose.upCalls))
+	}
+}
+
+func TestUp_UnresolvableSecretLogsWarning(t *testing.T) {
+	t.Setenv("UNSET_VAR", "")
+
+	dir := t.TempDir()
+	source := newFakeSource()
+	compose := &spyCompose{}
+	globalCfg := domain.GlobalConfig{
+		Mounts: domain.Mounts{
+			Secrets: []domain.SecretMount{
+				{Name: "missing-token", Source: "${UNSET_VAR}", Env: "TOKEN"},
+			},
+		},
+	}
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc := service.NewEnvironmentService(source, compose, nil, globalCfg, project, dir)
+
+	var warnings []string
+	svc.SetLogger(func(format string, args ...any) {
+		warnings = append(warnings, fmt.Sprintf(format, args...))
+	})
+
+	if err := svc.Up(false); err != nil {
+		t.Fatalf("Up() should succeed with unresolvable secret: %v", err)
+	}
+
+	if len(warnings) == 0 {
+		t.Error("expected at least one warning for unresolvable secret")
+	}
+
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "UNSET_VAR") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected warning mentioning UNSET_VAR, got %v", warnings)
+	}
+
+	// Compose should still render correctly.
+	composeYAML, err := os.ReadFile(filepath.Join(dir, ".deckhand", "docker-compose.yml"))
+	if err != nil {
+		t.Fatalf("reading compose: %v", err)
+	}
+	if !strings.Contains(string(composeYAML), "sleep infinity") {
+		t.Errorf("compose file not rendered correctly\nGot:\n%s", composeYAML)
 	}
 }

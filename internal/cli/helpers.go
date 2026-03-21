@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -34,14 +35,31 @@ func loadProject(dir string) (*domain.Project, error) {
 }
 
 // newEnvironmentService creates an EnvironmentService wired to real infra.
+// It loads the global config for mount merging during Up.
 func newEnvironmentService(proj domain.Project, dir string) *service.EnvironmentService {
+	globalCfg := loadGlobalConfigOrEmpty()
 	return service.NewEnvironmentService(
 		&template.EmbeddedSource{},
 		docker.NewCompose(),
 		nil, // no volume manager — commands that need it create one explicitly
+		globalCfg,
 		proj,
 		dir,
 	)
+}
+
+// loadGlobalConfigOrEmpty loads the global config, returning an empty config
+// if the file doesn't exist or the path can't be resolved.
+func loadGlobalConfigOrEmpty() domain.GlobalConfig {
+	path, err := config.GlobalConfigPath()
+	if err != nil {
+		return domain.GlobalConfig{}
+	}
+	cfg, err := config.LoadGlobal(path)
+	if err != nil {
+		return domain.GlobalConfig{}
+	}
+	return *cfg
 }
 
 // newEnvironmentServiceWithVolumes creates an EnvironmentService with volume
@@ -55,10 +73,12 @@ func newEnvironmentServiceWithVolumes(proj domain.Project, dir string) (*service
 	cleanup := func() { _ = client.Close() }
 
 	volMgr := newVolumeListerAdapter(docker.NewVolume(client.API()))
+	globalCfg := loadGlobalConfigOrEmpty()
 	svc := service.NewEnvironmentService(
 		&template.EmbeddedSource{},
 		docker.NewCompose(),
 		volMgr,
+		globalCfg,
 		proj,
 		dir,
 	)
@@ -205,4 +225,30 @@ func (c *compositeSource) LoadMeta(name string) (*domain.TemplateMeta, error) {
 		lastErr = err
 	}
 	return nil, lastErr
+}
+
+// displayGlobalMountSummary prints an informational summary of active global
+// mounts. If no global config exists or it has no mounts, nothing is printed.
+func displayGlobalMountSummary(w io.Writer) {
+	cfg := loadGlobalConfigOrEmpty()
+
+	var entries []string
+	for _, v := range cfg.Mounts.Volumes {
+		entries = append(entries, v.Name+" (volume)")
+	}
+	for _, s := range cfg.Mounts.Secrets {
+		entries = append(entries, s.Name+" (secret)")
+	}
+	for _, s := range cfg.Mounts.Sockets {
+		entries = append(entries, s.Name+" (socket)")
+	}
+
+	if len(entries) == 0 {
+		return
+	}
+
+	fmt.Fprintln(w, "\nGlobal mounts:")
+	for _, e := range entries {
+		fmt.Fprintf(w, "  %s\n", e)
+	}
 }
