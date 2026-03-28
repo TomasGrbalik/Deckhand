@@ -85,6 +85,7 @@ func (s *InitService) BuildProject(projectName, templateName string, variables m
 	}
 
 	proj := &domain.Project{
+		Version:  1,
 		Name:     projectName,
 		Template: templateName,
 	}

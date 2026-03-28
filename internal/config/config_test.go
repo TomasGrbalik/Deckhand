@@ -63,6 +63,117 @@ env:
 	}
 }
 
+func TestLoad_MissingVersion(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	content := `project: myapp
+template: base
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	proj, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if proj.Version != 1 {
+		t.Errorf("Version = %d, want 1 (default for missing version)", proj.Version)
+	}
+}
+
+func TestLoad_Version1(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	content := `version: 1
+project: myapp
+template: base
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	proj, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if proj.Version != 1 {
+		t.Errorf("Version = %d, want 1", proj.Version)
+	}
+}
+
+func TestLoad_UnsupportedVersion(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	content := `version: 2
+project: myapp
+template: base
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := config.Load(cfgPath)
+	if err == nil {
+		t.Fatal("Load() should return error for unsupported version")
+	}
+
+	want := "config version 2 is not supported — please upgrade deckhand"
+	if got := err.Error(); got != want {
+		t.Errorf("error = %q, want %q", got, want)
+	}
+}
+
+func containsStr(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || func() bool {
+		for i := 0; i <= len(s)-len(substr); i++ {
+			if s[i:i+len(substr)] == substr {
+				return true
+			}
+		}
+		return false
+	}())
+}
+
+func TestSave_SetsVersionWhenZero(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	proj := &domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		// Version is 0 (zero value)
+	}
+
+	if err := config.Save(cfgPath, proj); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+
+	// Read the raw file to verify version is present.
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error: %v", err)
+	}
+
+	if !containsStr(string(data), "version: 1") {
+		t.Errorf("saved file should contain 'version: 1', got:\n%s", data)
+	}
+
+	// Also verify round-trip.
+	loaded, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if loaded.Version != 1 {
+		t.Errorf("Version = %d, want 1", loaded.Version)
+	}
+}
+
 func TestLoad_MissingFile(t *testing.T) {
 	_, err := config.Load("/nonexistent/path/.deckhand.yaml")
 	if err == nil {
@@ -94,6 +205,7 @@ func TestSave_RoundTrip(t *testing.T) {
 	cfgPath := filepath.Join(dir, ".deckhand.yaml")
 
 	original := &domain.Project{
+		Version:  1,
 		Name:     "myapp",
 		Template: "base",
 		Ports: []domain.PortMapping{

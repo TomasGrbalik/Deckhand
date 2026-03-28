@@ -178,6 +178,19 @@ func TestInitService_BuildProject_AllDefaults(t *testing.T) {
 	}
 }
 
+func TestInitService_BuildProject_SetsVersion(t *testing.T) {
+	svc := newInitService(nil, newFakeSource())
+	meta := &domain.TemplateMeta{
+		Variables: map[string]domain.TemplateVariable{},
+	}
+
+	proj := svc.BuildProject("my-app", "base", map[string]string{}, meta)
+
+	if proj.Version != 1 {
+		t.Errorf("Version = %d, want 1", proj.Version)
+	}
+}
+
 func TestInitService_BuildProject_NoVariables(t *testing.T) {
 	svc := newInitService(nil, newFakeSource())
 	meta := &domain.TemplateMeta{
