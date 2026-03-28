@@ -123,9 +123,9 @@ template: base
 		t.Fatal("Load() should return error for unsupported version")
 	}
 
-	want := "config version 2 is not supported"
-	if got := err.Error(); !containsStr(got, want) {
-		t.Errorf("error = %q, want it to contain %q", got, want)
+	want := "config version 2 is not supported — please upgrade deckhand"
+	if got := err.Error(); got != want {
+		t.Errorf("error = %q, want %q", got, want)
 	}
 }
 

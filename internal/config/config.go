@@ -45,6 +45,10 @@ func Load(path string) (*domain.Project, error) {
 
 // Save writes a Project back to a .deckhand.yaml file at path.
 func Save(path string, proj *domain.Project) error {
+	if proj == nil {
+		return errors.New("project config is nil")
+	}
+
 	// Ensure version is always written.
 	if proj.Version == 0 {
 		proj.Version = 1
