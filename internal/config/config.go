@@ -31,11 +31,25 @@ func Load(path string) (*domain.Project, error) {
 		return nil, fmt.Errorf("unmarshalling config %s: %w", path, err)
 	}
 
+	// Treat missing version as version 1 (backward compatible).
+	if proj.Version == 0 {
+		proj.Version = 1
+	}
+
+	if proj.Version > 1 {
+		return nil, fmt.Errorf("config version %d is not supported — please upgrade deckhand", proj.Version)
+	}
+
 	return &proj, nil
 }
 
 // Save writes a Project back to a .deckhand.yaml file at path.
 func Save(path string, proj *domain.Project) error {
+	// Ensure version is always written.
+	if proj.Version == 0 {
+		proj.Version = 1
+	}
+
 	data, err := goyaml.Marshal(proj)
 	if err != nil {
 		return fmt.Errorf("marshaling config: %w", err)

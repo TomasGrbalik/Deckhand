@@ -3,6 +3,7 @@ package domain
 // Project represents the user's project configuration.
 // This is what .deckhand.yaml deserializes into.
 type Project struct {
+	Version   int               `yaml:"version"`
 	Name      string            `yaml:"project"`
 	Template  string            `yaml:"template"`
 	Ports     []PortMapping     `yaml:"ports"`
