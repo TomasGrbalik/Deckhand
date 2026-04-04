@@ -10,6 +10,7 @@ type Project struct {
 	Env       map[string]string `yaml:"env"`
 	Variables map[string]string `yaml:"variables,omitempty"`
 	Mounts    Mounts            `yaml:"mounts,omitempty"`
+	Services  []ServiceConfig   `yaml:"services,omitempty"`
 }
 
 // TemplateVariable describes a single configurable variable in a template.
