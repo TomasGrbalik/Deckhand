@@ -482,7 +482,7 @@ func TestRender_ComposeWithCompanions(t *testing.T) {
 				t.Fatalf("expected services map in YAML\nGot:\n%s", output)
 			}
 			for _, name := range []string{"postgres", "redis", "devcontainer"} {
-				if _, ok := services[name]; !ok {
+				if _, found := services[name]; !found {
 					t.Errorf("services map missing %q\nGot:\n%s", name, output)
 				}
 			}

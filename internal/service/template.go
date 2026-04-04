@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"maps"
 	"sort"
@@ -189,7 +190,7 @@ func buildCompanionData(project domain.Project, registry CompanionResolver) ([]C
 			continue
 		}
 		if registry == nil {
-			return nil, nil, fmt.Errorf("companion registry is required when services are configured")
+			return nil, nil, errors.New("companion registry is required when services are configured")
 		}
 
 		svc, err := registry.Resolve(sc.Name, sc.Version)
