@@ -51,7 +51,7 @@ services:
 {{- end }}
 {{- if .HealthCheck.Test }}
     healthcheck:
-      test: ["CMD-SHELL", "{{ .HealthCheck.Test }}"]
+      test: ["CMD-SHELL", {{ printf "%q" .HealthCheck.Test }}]
       interval: {{ .HealthCheck.Interval }}
       timeout: {{ .HealthCheck.Timeout }}
       retries: {{ .HealthCheck.Retries }}

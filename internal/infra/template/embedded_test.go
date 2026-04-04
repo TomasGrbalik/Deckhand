@@ -416,3 +416,106 @@ func TestRender_ComposeWithNoPorts(t *testing.T) {
 		t.Errorf("rendered compose is not valid YAML: %v\nGot:\n%s", err, output)
 	}
 }
+
+func TestRender_ComposeWithCompanions(t *testing.T) {
+	templates := []string{"base", "python"}
+
+	for _, tmplName := range templates {
+		t.Run(tmplName, func(t *testing.T) {
+			output := renderCompose(t, tmplName, templateData{
+				Project: domain.Project{
+					Name:     "myapp",
+					Template: tmplName,
+					Ports: []domain.PortMapping{
+						{Port: 8080, Name: "web"},
+					},
+				},
+				ExposedPorts: []domain.PortMapping{
+					{Port: 8080, Name: "web"},
+				},
+				Companions: []CompanionTemplateData{
+					{
+						Name:  "postgres",
+						Image: "postgres:16-alpine",
+						Ports: []int{5432},
+						Environment: []EnvEntry{
+							{Key: "POSTGRES_DB", Value: "devdb"},
+							{Key: "POSTGRES_PASSWORD", Value: "dev"},
+							{Key: "POSTGRES_USER", Value: "dev"},
+						},
+						HealthCheck: domain.HealthCheck{
+							Test:     "pg_isready -U dev",
+							Interval: "5s",
+							Timeout:  "3s",
+							Retries:  5,
+						},
+						Volumes: []VolumeEntry{{entry: "myapp-postgres-data:/var/lib/postgresql/data"}},
+					},
+					{
+						Name:  "redis",
+						Image: "redis:7-alpine",
+						Ports: []int{6379},
+						HealthCheck: domain.HealthCheck{
+							Test:     "redis-cli ping",
+							Interval: "5s",
+							Timeout:  "3s",
+							Retries:  5,
+						},
+						Volumes: []VolumeEntry{{entry: "myapp-redis-data:/data"}},
+					},
+				},
+				CompanionVolumes: []CompanionVolumeEntry{
+					{ComposeName: "myapp-postgres-data", ServiceName: "postgres"},
+					{ComposeName: "myapp-redis-data", ServiceName: "redis"},
+				},
+			})
+
+			// Must be valid YAML.
+			var parsed map[string]any
+			if err := yaml.Unmarshal([]byte(output), &parsed); err != nil {
+				t.Fatalf("rendered compose is not valid YAML: %v\nGot:\n%s", err, output)
+			}
+
+			// Services map must contain companion keys.
+			services, ok := parsed["services"].(map[string]any)
+			if !ok {
+				t.Fatalf("expected services map in YAML\nGot:\n%s", output)
+			}
+			for _, name := range []string{"postgres", "redis", "devcontainer"} {
+				if _, ok := services[name]; !ok {
+					t.Errorf("services map missing %q\nGot:\n%s", name, output)
+				}
+			}
+
+			// Companion content checks.
+			checks := []string{
+				"image: postgres:16-alpine",
+				"image: redis:7-alpine",
+				"127.0.0.1:5432:5432",
+				"127.0.0.1:6379:6379",
+				"POSTGRES_DB:",
+				"POSTGRES_USER:",
+				"pg_isready",
+				"redis-cli ping",
+				"myapp-postgres-data:",
+				"myapp-redis-data:",
+			}
+			for _, want := range checks {
+				if !strings.Contains(output, want) {
+					t.Errorf("compose output missing %q\nGot:\n%s", want, output)
+				}
+			}
+
+			// Top-level volumes section must declare companion volumes.
+			vols, ok := parsed["volumes"].(map[string]any)
+			if !ok {
+				t.Fatalf("expected top-level volumes map\nGot:\n%s", output)
+			}
+			for _, volName := range []string{"myapp-postgres-data", "myapp-redis-data"} {
+				if _, ok := vols[volName]; !ok {
+					t.Errorf("volumes map missing %q\nGot:\n%s", volName, output)
+				}
+			}
+		})
+	}
+}

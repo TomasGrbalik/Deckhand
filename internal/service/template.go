@@ -177,7 +177,7 @@ func buildTemplateData(project domain.Project, meta *domain.TemplateMeta, mounts
 // and converts them into template-friendly data. Returns nil slices when
 // registry is nil or no services are selected.
 func buildCompanionData(project domain.Project, registry CompanionResolver) ([]CompanionTemplateData, []CompanionVolumeEntry, error) {
-	if registry == nil || len(project.Services) == 0 {
+	if len(project.Services) == 0 {
 		return nil, nil, nil
 	}
 
@@ -187,6 +187,9 @@ func buildCompanionData(project domain.Project, registry CompanionResolver) ([]C
 	for _, sc := range project.Services {
 		if !sc.Enabled {
 			continue
+		}
+		if registry == nil {
+			return nil, nil, fmt.Errorf("companion registry is required when services are configured")
 		}
 
 		svc, err := registry.Resolve(sc.Name, sc.Version)
@@ -203,7 +206,7 @@ func buildCompanionData(project domain.Project, registry CompanionResolver) ([]C
 			// Volumes are in "name:/path" format. Prefix name with project.
 			name, target, ok := parseVolumeSpec(v)
 			if !ok {
-				continue
+				return nil, nil, fmt.Errorf("companion %q has invalid volume spec %q", svc.Name, v)
 			}
 			composeName := project.Name + "-" + name
 			volEntries = append(volEntries, VolumeEntry{entry: composeName + ":" + target})

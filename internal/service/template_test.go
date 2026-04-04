@@ -609,7 +609,7 @@ func TestRender_WithCompanions(t *testing.T) {
 	}
 
 	// Postgres service block.
-	if !strings.Contains(out.Compose, "postgres:") {
+	if !strings.Contains(out.Compose, "\n  postgres:\n") {
 		t.Errorf("compose missing postgres service block\nGot:\n%s", out.Compose)
 	}
 	if !strings.Contains(out.Compose, "image: postgres:16-alpine") {
@@ -617,7 +617,7 @@ func TestRender_WithCompanions(t *testing.T) {
 	}
 
 	// Redis service block.
-	if !strings.Contains(out.Compose, "redis:") {
+	if !strings.Contains(out.Compose, "\n  redis:\n") {
 		t.Errorf("compose missing redis service block\nGot:\n%s", out.Compose)
 	}
 	if !strings.Contains(out.Compose, "image: redis:7-alpine") {
