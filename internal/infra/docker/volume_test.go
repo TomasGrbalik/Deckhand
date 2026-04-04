@@ -16,7 +16,7 @@ func newTestDockerAPI(t *testing.T) client.APIClient {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-	cli, err := docker.NewClient()
+	cli, err := docker.NewClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewClient() error: %v", err)
 	}

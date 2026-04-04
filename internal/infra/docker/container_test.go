@@ -45,7 +45,7 @@ func TestFindContainer(t *testing.T) {
 	name, cleanup := testContainer(t, "testproj", "devcontainer")
 	defer cleanup()
 
-	cli, err := docker.NewClient()
+	cli, err := docker.NewClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewClient(): %v", err)
 	}
@@ -77,7 +77,7 @@ func TestFindContainerNotFound(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	cli, err := docker.NewClient()
+	cli, err := docker.NewClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewClient(): %v", err)
 	}
@@ -101,7 +101,7 @@ func TestExecNonInteractive(t *testing.T) {
 	name, cleanup := testContainer(t, "testexec", "dev")
 	defer cleanup()
 
-	cli, err := docker.NewClient()
+	cli, err := docker.NewClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewClient(): %v", err)
 	}
@@ -120,7 +120,7 @@ func TestExecContainerNotFound(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	cli, err := docker.NewClient()
+	cli, err := docker.NewClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewClient(): %v", err)
 	}
@@ -138,7 +138,7 @@ func TestLogsContainerNotFound(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	cli, err := docker.NewClient()
+	cli, err := docker.NewClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewClient(): %v", err)
 	}
@@ -159,7 +159,7 @@ func TestListByProject(t *testing.T) {
 	_, cleanup := testContainer(t, "testlist", "devcontainer")
 	defer cleanup()
 
-	cli, err := docker.NewClient()
+	cli, err := docker.NewClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewClient(): %v", err)
 	}
@@ -195,7 +195,7 @@ func TestListByProjectEmpty(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	cli, err := docker.NewClient()
+	cli, err := docker.NewClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewClient(): %v", err)
 	}
@@ -221,7 +221,7 @@ func TestListAll(t *testing.T) {
 	_, cleanup2 := testContainer(t, "testall-b", "devcontainer")
 	defer cleanup2()
 
-	cli, err := docker.NewClient()
+	cli, err := docker.NewClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewClient(): %v", err)
 	}
@@ -268,7 +268,7 @@ func TestLogs(t *testing.T) {
 	// Give the container a moment to produce output.
 	time.Sleep(500 * time.Millisecond)
 
-	cli, err := docker.NewClient()
+	cli, err := docker.NewClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewClient(): %v", err)
 	}
