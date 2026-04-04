@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/volume"
-	"github.com/docker/docker/client"
+	"github.com/moby/moby/client"
 )
 
 // VolumeInfo holds metadata about a Docker volume discovered by label.
@@ -29,18 +27,17 @@ func NewVolume(api client.APIClient) *Volume {
 func (v *Volume) ListByProject(projectName string) ([]VolumeInfo, error) {
 	ctx := context.Background()
 
-	f := filters.NewArgs(
-		filters.Arg("label", "dev.deckhand.managed=true"),
-		filters.Arg("label", "dev.deckhand.project="+projectName),
-	)
+	f := client.Filters{}
+	f = f.Add("label", "dev.deckhand.managed=true")
+	f = f.Add("label", "dev.deckhand.project="+projectName)
 
-	resp, err := v.api.VolumeList(ctx, volume.ListOptions{Filters: f})
+	resp, err := v.api.VolumeList(ctx, client.VolumeListOptions{Filters: f})
 	if err != nil {
 		return nil, fmt.Errorf("listing volumes for project %q: %w", projectName, err)
 	}
 
-	result := make([]VolumeInfo, 0, len(resp.Volumes))
-	for _, vol := range resp.Volumes {
+	result := make([]VolumeInfo, 0, len(resp.Items))
+	for _, vol := range resp.Items {
 		size := int64(-1)
 		if vol.UsageData != nil {
 			size = vol.UsageData.Size
@@ -53,7 +50,7 @@ func (v *Volume) ListByProject(projectName string) ([]VolumeInfo, error) {
 // Remove deletes a volume by name.
 func (v *Volume) Remove(volumeName string) error {
 	ctx := context.Background()
-	if err := v.api.VolumeRemove(ctx, volumeName, false); err != nil {
+	if _, err := v.api.VolumeRemove(ctx, volumeName, client.VolumeRemoveOptions{}); err != nil {
 		return fmt.Errorf("removing volume %q: %w", volumeName, err)
 	}
 	return nil

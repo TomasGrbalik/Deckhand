@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
+	"github.com/moby/moby/client"
 )
 
 // Client wraps the Docker SDK client for daemon communication.
@@ -16,18 +15,18 @@ type Client struct {
 // NewClient creates a Docker client using the default environment settings
 // (DOCKER_HOST, DOCKER_TLS_VERIFY, etc.).
 func NewClient() (*Client, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := client.New(client.FromEnv)
 	if err != nil {
 		return nil, fmt.Errorf("creating docker client: %w", err)
 	}
 	return &Client{api: cli}, nil
 }
 
-// Ping verifies the Docker daemon is reachable.
-func (c *Client) Ping(ctx context.Context) (types.Ping, error) {
-	resp, err := c.api.Ping(ctx)
+// Ping verifies the Docker daemon is reachable and negotiates the API version.
+func (c *Client) Ping(ctx context.Context) (client.PingResult, error) {
+	resp, err := c.api.Ping(ctx, client.PingOptions{NegotiateAPIVersion: true})
 	if err != nil {
-		return types.Ping{}, fmt.Errorf("pinging docker daemon: %w", err)
+		return client.PingResult{}, fmt.Errorf("pinging docker daemon: %w", err)
 	}
 	return resp, nil
 }

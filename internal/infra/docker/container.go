@@ -7,10 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/client"
+	"github.com/moby/moby/client"
 	"golang.org/x/term"
 )
 
@@ -52,32 +49,32 @@ func NewContainer(api client.APIClient) *Container {
 func (c *Container) Exec(containerName string, cmd []string, tty bool) error {
 	ctx := context.Background()
 
-	execCfg := container.ExecOptions{
+	execCfg := client.ExecCreateOptions{
 		Cmd:          cmd,
 		AttachStdin:  tty,
 		AttachStdout: true,
 		AttachStderr: true,
-		Tty:          tty,
+		TTY:          tty,
 	}
 
-	execID, err := c.api.ContainerExecCreate(ctx, containerName, execCfg)
+	execID, err := c.api.ExecCreate(ctx, containerName, execCfg)
 	if err != nil {
 		return fmt.Errorf("creating exec in %q: %w", containerName, err)
 	}
 
-	resp, err := c.api.ContainerExecAttach(ctx, execID.ID, container.ExecAttachOptions{Tty: tty})
+	resp, err := c.api.ExecAttach(ctx, execID.ID, client.ExecAttachOptions{TTY: tty})
 	if err != nil {
 		return fmt.Errorf("attaching to exec in %q: %w", containerName, err)
 	}
 	defer resp.Close()
 
 	if tty {
-		return c.execInteractive(ctx, resp, execID.ID)
+		return c.execInteractive(ctx, resp.HijackedResponse)
 	}
-	return c.execNonInteractive(resp)
+	return c.execNonInteractive(resp.HijackedResponse)
 }
 
-func (c *Container) execInteractive(_ context.Context, resp types.HijackedResponse, _ string) error {
+func (c *Container) execInteractive(_ context.Context, resp client.HijackedResponse) error {
 	//nolint:gosec // Fd() returns uintptr; converting to int is safe for terminal FDs on all supported platforms.
 	fd := int(os.Stdin.Fd())
 	oldState, termErr := term.MakeRaw(fd)
@@ -110,7 +107,7 @@ func (c *Container) execInteractive(_ context.Context, resp types.HijackedRespon
 	return nil
 }
 
-func (c *Container) execNonInteractive(resp types.HijackedResponse) error {
+func (c *Container) execNonInteractive(resp client.HijackedResponse) error {
 	if _, err := io.Copy(os.Stdout, resp.Reader); err != nil {
 		return fmt.Errorf("reading exec output: %w", err)
 	}
@@ -121,7 +118,7 @@ func (c *Container) execNonInteractive(resp types.HijackedResponse) error {
 func (c *Container) Logs(containerName string, follow bool, tail string) (io.ReadCloser, error) {
 	ctx := context.Background()
 
-	opts := container.LogsOptions{
+	opts := client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     follow,
@@ -141,45 +138,42 @@ func (c *Container) Logs(containerName string, follow bool, tail string) (io.Rea
 func (c *Container) FindContainer(projectName, serviceName string) (string, error) {
 	ctx := context.Background()
 
-	f := filters.NewArgs(
-		filters.Arg("label", "dev.deckhand.project="+projectName),
-		filters.Arg("label", "dev.deckhand.service="+serviceName),
-	)
+	f := client.Filters{}
+	f = f.Add("label", "dev.deckhand.project="+projectName)
+	f = f.Add("label", "dev.deckhand.service="+serviceName)
 
-	containers, err := c.api.ContainerList(ctx, container.ListOptions{Filters: f})
+	result, err := c.api.ContainerList(ctx, client.ContainerListOptions{Filters: f})
 	if err != nil {
 		return "", fmt.Errorf("listing containers: %w", err)
 	}
 
-	if len(containers) == 0 {
+	if len(result.Items) == 0 {
 		return "", fmt.Errorf("container not found for project %q service %q", projectName, serviceName)
 	}
 
-	return containers[0].ID, nil
+	return result.Items[0].ID, nil
 }
 
 // ListByProject returns all deckhand-managed containers for a specific project.
 func (c *Container) ListByProject(projectName string) ([]ContainerInfo, error) {
-	f := filters.NewArgs(
-		filters.Arg("label", "dev.deckhand.managed=true"),
-		filters.Arg("label", "dev.deckhand.project="+projectName),
-	)
+	f := client.Filters{}
+	f = f.Add("label", "dev.deckhand.managed=true")
+	f = f.Add("label", "dev.deckhand.project="+projectName)
 	return c.listContainers(f)
 }
 
 // ListAll returns all deckhand-managed containers across all projects.
 func (c *Container) ListAll() ([]ContainerInfo, error) {
-	f := filters.NewArgs(
-		filters.Arg("label", "dev.deckhand.managed=true"),
-	)
+	f := client.Filters{}
+	f = f.Add("label", "dev.deckhand.managed=true")
 	return c.listContainers(f)
 }
 
-func (c *Container) listContainers(f filters.Args) ([]ContainerInfo, error) {
+func (c *Container) listContainers(f client.Filters) ([]ContainerInfo, error) {
 	ctx := context.Background()
 
 	// Include stopped containers so list/status show everything.
-	summaries, err := c.api.ContainerList(ctx, container.ListOptions{
+	listResult, err := c.api.ContainerList(ctx, client.ContainerListOptions{
 		Filters: f,
 		All:     true,
 	})
@@ -187,8 +181,8 @@ func (c *Container) listContainers(f filters.Args) ([]ContainerInfo, error) {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 
-	result := make([]ContainerInfo, 0, len(summaries))
-	for _, s := range summaries {
+	result := make([]ContainerInfo, 0, len(listResult.Items))
+	for _, s := range listResult.Items {
 		var ports []PortInfo
 		for _, p := range s.Ports {
 			if p.PublicPort != 0 {
@@ -214,7 +208,7 @@ func (c *Container) listContainers(f filters.Args) ([]ContainerInfo, error) {
 			Service: s.Labels["dev.deckhand.service"],
 			Project: s.Labels["dev.deckhand.project"],
 			Image:   s.Image,
-			State:   s.State,
+			State:   string(s.State),
 			Status:  s.Status,
 			Created: time.Unix(s.Created, 0),
 			Ports:   ports,

@@ -5,14 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	dockervolume "github.com/docker/docker/api/types/volume"
-	dockerclient "github.com/docker/docker/client"
+	"github.com/moby/moby/client"
 
 	"github.com/TomasGrbalik/deckhand/internal/infra/docker"
 )
 
 // newTestDockerAPI returns a real Docker API client, skipping if Docker is unavailable.
-func newTestDockerAPI(t *testing.T) dockerclient.APIClient {
+func newTestDockerAPI(t *testing.T) client.APIClient {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -48,7 +47,7 @@ func TestVolume_ListAndRemove(t *testing.T) {
 	volName := projectName + "-workspace"
 
 	// Create a labeled volume via the Docker API directly.
-	_, err := api.VolumeCreate(ctx, dockervolume.CreateOptions{
+	_, err := api.VolumeCreate(ctx, client.VolumeCreateOptions{
 		Name: volName,
 		Labels: map[string]string{
 			"dev.deckhand.managed": "true",
@@ -59,7 +58,7 @@ func TestVolume_ListAndRemove(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating test volume: %v", err)
 	}
-	t.Cleanup(func() { _ = api.VolumeRemove(ctx, volName, true) })
+	t.Cleanup(func() { _, _ = api.VolumeRemove(ctx, volName, client.VolumeRemoveOptions{Force: true}) })
 
 	// ListByProject should find it.
 	vols, err := vol.ListByProject(projectName)
