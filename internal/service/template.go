@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"sort"
+	"strings"
 	"text/template"
 
 	"github.com/TomasGrbalik/deckhand/internal/domain"
@@ -48,26 +49,55 @@ type NamedVolumeEntry struct {
 	MountName   string
 }
 
+// CompanionResolver looks up companion service definitions by name.
+// The CompanionRegistry satisfies this interface.
+type CompanionResolver interface {
+	Resolve(name, version string) (domain.CompanionService, error)
+}
+
+// CompanionTemplateData holds the template-friendly representation of a
+// companion service for rendering into compose YAML.
+type CompanionTemplateData struct {
+	Name        string
+	Image       string
+	Ports       []int
+	Environment []EnvEntry
+	HealthCheck domain.HealthCheck
+	Volumes     []VolumeEntry
+}
+
+// CompanionVolumeEntry represents a companion's named volume in the top-level
+// volumes: section, labeled with the owning service name.
+type CompanionVolumeEntry struct {
+	ComposeName string
+	ServiceName string
+}
+
 // templateData is the data structure passed to Go templates during rendering.
 // ExposedPorts contains only non-internal ports from the project config.
 // Vars contains template variables with defaults merged with project overrides.
 type templateData struct {
 	domain.Project
-	ExposedPorts []domain.PortMapping
-	Vars         map[string]string
-	Volumes      []VolumeEntry
-	Environment  []EnvEntry
-	NamedVolumes []NamedVolumeEntry
+	ExposedPorts     []domain.PortMapping
+	Vars             map[string]string
+	Volumes          []VolumeEntry
+	Environment      []EnvEntry
+	NamedVolumes     []NamedVolumeEntry
+	Companions       []CompanionTemplateData
+	CompanionVolumes []CompanionVolumeEntry
 }
 
 // TemplateService renders project templates into Dockerfile and compose content.
 type TemplateService struct {
-	source TemplateSource
+	source   TemplateSource
+	registry CompanionResolver
 }
 
-// NewTemplateService creates a TemplateService with the given template source.
-func NewTemplateService(source TemplateSource) *TemplateService {
-	return &TemplateService{source: source}
+// NewTemplateService creates a TemplateService with the given template source
+// and an optional companion registry. Pass nil if companion services are not
+// needed (e.g., when no services are selected in the project config).
+func NewTemplateService(source TemplateSource, registry CompanionResolver) *TemplateService {
+	return &TemplateService{source: source, registry: registry}
 }
 
 // Render loads the template for the project and renders it with the project's
@@ -90,7 +120,10 @@ func (s *TemplateService) Render(project domain.Project, mounts domain.Mounts) (
 		return nil, fmt.Errorf("loading metadata for template %q: %w", name, err)
 	}
 
-	data := buildTemplateData(project, meta, mounts)
+	data, err := buildTemplateData(project, meta, mounts, s.registry)
+	if err != nil {
+		return nil, fmt.Errorf("building template data: %w", err)
+	}
 
 	dockerfile, err := render("Dockerfile", dockerfileTmpl, data)
 	if err != nil {
@@ -111,7 +144,7 @@ func (s *TemplateService) Render(project domain.Project, mounts domain.Mounts) (
 // buildTemplateData creates the data passed to templates, filtering out
 // internal ports, merging template variable defaults with project overrides,
 // and converting resolved mounts into template-friendly entries.
-func buildTemplateData(project domain.Project, meta *domain.TemplateMeta, mounts domain.Mounts) templateData {
+func buildTemplateData(project domain.Project, meta *domain.TemplateMeta, mounts domain.Mounts, registry CompanionResolver) (templateData, error) {
 	var exposed []domain.PortMapping
 	for _, p := range project.Ports {
 		if !p.Internal {
@@ -123,14 +156,101 @@ func buildTemplateData(project domain.Project, meta *domain.TemplateMeta, mounts
 	volumes, namedVolumes := buildVolumeEntries(project.Name, mounts)
 	environment := buildEnvironment(project.Env, mounts)
 
-	return templateData{
-		Project:      project,
-		ExposedPorts: exposed,
-		Vars:         vars,
-		Volumes:      volumes,
-		Environment:  environment,
-		NamedVolumes: namedVolumes,
+	companions, companionVolumes, err := buildCompanionData(project, registry)
+	if err != nil {
+		return templateData{}, err
 	}
+
+	return templateData{
+		Project:          project,
+		ExposedPorts:     exposed,
+		Vars:             vars,
+		Volumes:          volumes,
+		Environment:      environment,
+		NamedVolumes:     namedVolumes,
+		Companions:       companions,
+		CompanionVolumes: companionVolumes,
+	}, nil
+}
+
+// buildCompanionData resolves the project's selected services via the registry
+// and converts them into template-friendly data. Returns nil slices when
+// registry is nil or no services are selected.
+func buildCompanionData(project domain.Project, registry CompanionResolver) ([]CompanionTemplateData, []CompanionVolumeEntry, error) {
+	if registry == nil || len(project.Services) == 0 {
+		return nil, nil, nil
+	}
+
+	var companions []CompanionTemplateData
+	var volumes []CompanionVolumeEntry
+
+	for _, sc := range project.Services {
+		if !sc.Enabled {
+			continue
+		}
+
+		svc, err := registry.Resolve(sc.Name, sc.Version)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolving companion %q: %w", sc.Name, err)
+		}
+
+		// Build sorted environment entries for deterministic output.
+		envEntries := buildSortedEnv(svc.Environment)
+
+		// Build volume entries and collect named volumes.
+		var volEntries []VolumeEntry
+		for _, v := range svc.Volumes {
+			// Volumes are in "name:/path" format. Prefix name with project.
+			name, target, ok := parseVolumeSpec(v)
+			if !ok {
+				continue
+			}
+			composeName := project.Name + "-" + name
+			volEntries = append(volEntries, VolumeEntry{entry: composeName + ":" + target})
+			volumes = append(volumes, CompanionVolumeEntry{
+				ComposeName: composeName,
+				ServiceName: svc.Name,
+			})
+		}
+
+		companions = append(companions, CompanionTemplateData{
+			Name:        svc.Name,
+			Image:       svc.Image,
+			Ports:       svc.Ports,
+			Environment: envEntries,
+			HealthCheck: svc.HealthCheck,
+			Volumes:     volEntries,
+		})
+	}
+
+	return companions, volumes, nil
+}
+
+// buildSortedEnv converts a map of environment variables into a sorted slice
+// of EnvEntry for deterministic template output.
+func buildSortedEnv(env map[string]string) []EnvEntry {
+	if len(env) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	entries := make([]EnvEntry, 0, len(keys))
+	for _, k := range keys {
+		entries = append(entries, EnvEntry{Key: k, Value: env[k]})
+	}
+	return entries
+}
+
+// parseVolumeSpec splits a "name:/path" volume spec into name and target.
+func parseVolumeSpec(spec string) (name, target string, ok bool) {
+	parts := strings.SplitN(spec, ":", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
 }
 
 // buildVolumeEntries produces the compose volumes: entries and the top-level

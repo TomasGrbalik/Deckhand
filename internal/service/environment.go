@@ -88,7 +88,7 @@ func (s *EnvironmentService) logf(format string, args ...any) {
 // It loads template metadata to extract default mounts, then merges
 // template → global → project mounts before rendering.
 func (s *EnvironmentService) Up(build bool) error {
-	tmplSvc := NewTemplateService(s.templates)
+	tmplSvc := NewTemplateService(s.templates, NewCompanionRegistry())
 
 	// Load template metadata to get default mounts (e.g., workspace volume).
 	templateName := s.project.Template

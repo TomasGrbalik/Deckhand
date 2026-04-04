@@ -304,14 +304,32 @@ type NamedVolumeEntry struct {
 	MountName   string
 }
 
+// CompanionTemplateData mirrors the service layer's CompanionTemplateData.
+type CompanionTemplateData struct {
+	Name        string
+	Image       string
+	Ports       []int
+	Environment []EnvEntry
+	HealthCheck domain.HealthCheck
+	Volumes     []VolumeEntry
+}
+
+// CompanionVolumeEntry mirrors the service layer's CompanionVolumeEntry.
+type CompanionVolumeEntry struct {
+	ComposeName string
+	ServiceName string
+}
+
 // templateData mirrors the data passed to compose templates during rendering.
 // ExposedPorts contains only non-internal ports from domain.Project.
 type templateData struct {
 	domain.Project
-	ExposedPorts []domain.PortMapping
-	Volumes      []VolumeEntry
-	Environment  []EnvEntry
-	NamedVolumes []NamedVolumeEntry
+	ExposedPorts     []domain.PortMapping
+	Volumes          []VolumeEntry
+	Environment      []EnvEntry
+	NamedVolumes     []NamedVolumeEntry
+	Companions       []CompanionTemplateData
+	CompanionVolumes []CompanionVolumeEntry
 }
 
 // renderCompose is a test helper that loads, parses, and executes a
