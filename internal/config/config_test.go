@@ -349,6 +349,112 @@ func TestLoad_EmptyFile(t *testing.T) {
 	}
 }
 
+func TestLoad_EnvVarOverrideProject(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	content := `project: myapp
+template: base
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("DECKHAND_PROJECT", "override-name")
+
+	proj, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if proj.Name != "override-name" {
+		t.Errorf("Name = %q, want %q", proj.Name, "override-name")
+	}
+	if proj.Template != "base" {
+		t.Errorf("Template = %q, want %q (should be unchanged)", proj.Template, "base")
+	}
+}
+
+func TestLoad_EnvVarOverrideTemplate(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	content := `project: myapp
+template: go
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("DECKHAND_TEMPLATE", "rust")
+
+	proj, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if proj.Template != "rust" {
+		t.Errorf("Template = %q, want %q", proj.Template, "rust")
+	}
+	if proj.Name != "myapp" {
+		t.Errorf("Name = %q, want %q (should be unchanged)", proj.Name, "myapp")
+	}
+}
+
+func TestLoad_EnvVarOverrideBoth(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	content := `project: myapp
+template: base
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("DECKHAND_PROJECT", "ci-build")
+	t.Setenv("DECKHAND_TEMPLATE", "node")
+
+	proj, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if proj.Name != "ci-build" {
+		t.Errorf("Name = %q, want %q", proj.Name, "ci-build")
+	}
+	if proj.Template != "node" {
+		t.Errorf("Template = %q, want %q", proj.Template, "node")
+	}
+}
+
+func TestLoad_EnvVarEmptyDoesNotOverride(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".deckhand.yaml")
+
+	content := `project: myapp
+template: base
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("DECKHAND_PROJECT", "")
+	t.Setenv("DECKHAND_TEMPLATE", "")
+
+	proj, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if proj.Name != "myapp" {
+		t.Errorf("Name = %q, want %q (empty env var should not override)", proj.Name, "myapp")
+	}
+	if proj.Template != "base" {
+		t.Errorf("Template = %q, want %q (empty env var should not override)", proj.Template, "base")
+	}
+}
+
 func TestLoadGlobal_CompleteConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")

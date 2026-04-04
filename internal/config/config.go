@@ -40,6 +40,15 @@ func Load(path string) (*domain.Project, error) {
 		return nil, fmt.Errorf("config version %d is not supported — please upgrade deckhand", proj.Version)
 	}
 
+	// Env var overrides: DECKHAND_PROJECT and DECKHAND_TEMPLATE take
+	// precedence over file values (but flags still win at the CLI layer).
+	if v := os.Getenv("DECKHAND_PROJECT"); v != "" {
+		proj.Name = v
+	}
+	if v := os.Getenv("DECKHAND_TEMPLATE"); v != "" {
+		proj.Template = v
+	}
+
 	return &proj, nil
 }
 
