@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -90,7 +91,7 @@ func loadGlobalConfig() (domain.GlobalConfig, error) {
 // management support. Used by destroy which needs to discover and remove
 // labeled volumes. Does not load global config — destroy doesn't use mounts.
 func newEnvironmentServiceWithVolumes(proj domain.Project, dir string) (*service.EnvironmentService, func(), error) {
-	client, err := docker.NewClient()
+	client, err := docker.NewClient(context.Background())
 	if err != nil {
 		return nil, nil, fmt.Errorf("connecting to docker: %w", err)
 	}
@@ -139,7 +140,7 @@ func (a *volumeListerAdapter) Remove(volumeName string) error {
 
 // newContainerService creates a ContainerService wired to a real Docker client.
 func newContainerService() (*service.ContainerService, func(), error) {
-	client, err := docker.NewClient()
+	client, err := docker.NewClient(context.Background())
 	if err != nil {
 		return nil, nil, fmt.Errorf("connecting to docker: %w", err)
 	}
@@ -149,7 +150,7 @@ func newContainerService() (*service.ContainerService, func(), error) {
 
 // newStatusService creates a StatusService wired to a real Docker client.
 func newStatusService() (*service.StatusService, func(), error) {
-	client, err := docker.NewClient()
+	client, err := docker.NewClient(context.Background())
 	if err != nil {
 		return nil, nil, fmt.Errorf("connecting to docker: %w", err)
 	}
