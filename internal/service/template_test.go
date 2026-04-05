@@ -64,7 +64,41 @@ const fakeCompose = `services:
 {{- end }}
 {{- end }}
     command: sleep infinity
-{{- if .NamedVolumes }}
+{{- range .Companions }}
+
+  {{ .Name }}:
+    image: {{ .Image }}
+    labels:
+      dev.deckhand.managed: "true"
+      dev.deckhand.project: "{{ $.Name }}"
+      dev.deckhand.service: "{{ .Name }}"
+{{- if .Ports }}
+    ports:
+{{- range .Ports }}
+      - "127.0.0.1:{{ . }}:{{ . }}"
+{{- end }}
+{{- end }}
+{{- if .Environment }}
+    environment:
+{{- range .Environment }}
+      {{ .Key }}: {{ printf "%q" .Value }}
+{{- end }}
+{{- end }}
+{{- if .HealthCheck.Test }}
+    healthcheck:
+      test: ["CMD-SHELL", "{{ .HealthCheck.Test }}"]
+      interval: {{ .HealthCheck.Interval }}
+      timeout: {{ .HealthCheck.Timeout }}
+      retries: {{ .HealthCheck.Retries }}
+{{- end }}
+{{- if .Volumes }}
+    volumes:
+{{- range .Volumes }}
+      - {{ .ComposeEntry }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if or .NamedVolumes .CompanionVolumes }}
 
 volumes:
 {{- range .NamedVolumes }}
@@ -73,6 +107,13 @@ volumes:
       dev.deckhand.managed: "true"
       dev.deckhand.project: "{{ $.Name }}"
       dev.deckhand.volume: "{{ .MountName }}"
+{{- end }}
+{{- range .CompanionVolumes }}
+  {{ .ComposeName }}:
+    labels:
+      dev.deckhand.managed: "true"
+      dev.deckhand.project: "{{ $.Name }}"
+      dev.deckhand.service: "{{ .ServiceName }}"
 {{- end }}
 {{- end }}
 `
@@ -85,7 +126,7 @@ func newFakeSource() *fakeSource {
 }
 
 func TestRender_WithPorts(t *testing.T) {
-	svc := service.NewTemplateService(newFakeSource())
+	svc := service.NewTemplateService(newFakeSource(), nil)
 
 	project := domain.Project{
 		Name:     "myapp",
@@ -108,7 +149,7 @@ func TestRender_WithPorts(t *testing.T) {
 }
 
 func TestRender_NoPorts(t *testing.T) {
-	svc := service.NewTemplateService(newFakeSource())
+	svc := service.NewTemplateService(newFakeSource(), nil)
 
 	project := domain.Project{
 		Name:     "myapp",
@@ -136,7 +177,7 @@ func TestRender_DefaultTemplateName(t *testing.T) {
 	svc := service.NewTemplateService(&nameCapture{
 		inner: source,
 		name:  &loadedName,
-	})
+	}, nil)
 
 	project := domain.Project{
 		Name:     "myapp",
@@ -172,7 +213,7 @@ func TestRender_TemplateNotFound(t *testing.T) {
 	source := &fakeSource{
 		err: errors.New("template not found"),
 	}
-	svc := service.NewTemplateService(source)
+	svc := service.NewTemplateService(source, nil)
 
 	project := domain.Project{
 		Name:     "myapp",
@@ -194,7 +235,7 @@ func TestRender_MalformedTemplate(t *testing.T) {
 		dockerfile: "{{ .Invalid | bad_func }}",
 		compose:    fakeCompose,
 	}
-	svc := service.NewTemplateService(source)
+	svc := service.NewTemplateService(source, nil)
 
 	project := domain.Project{Name: "myapp", Template: "base"}
 
@@ -205,7 +246,7 @@ func TestRender_MalformedTemplate(t *testing.T) {
 }
 
 func TestRender_InternalPortsFiltered(t *testing.T) {
-	svc := service.NewTemplateService(newFakeSource())
+	svc := service.NewTemplateService(newFakeSource(), nil)
 
 	project := domain.Project{
 		Name:     "myapp",
@@ -241,7 +282,7 @@ func TestRender_VariableDefaults(t *testing.T) {
 			},
 		},
 	}
-	svc := service.NewTemplateService(source)
+	svc := service.NewTemplateService(source, nil)
 
 	project := domain.Project{Name: "myapp", Template: "go"}
 
@@ -266,7 +307,7 @@ func TestRender_VariableOverride(t *testing.T) {
 			},
 		},
 	}
-	svc := service.NewTemplateService(source)
+	svc := service.NewTemplateService(source, nil)
 
 	project := domain.Project{
 		Name:      "myapp",
@@ -293,7 +334,7 @@ func TestRender_UnknownVariableIgnored(t *testing.T) {
 			Variables: map[string]domain.TemplateVariable{},
 		},
 	}
-	svc := service.NewTemplateService(source)
+	svc := service.NewTemplateService(source, nil)
 
 	project := domain.Project{
 		Name:      "myapp",
@@ -312,7 +353,7 @@ func TestRender_UnknownVariableIgnored(t *testing.T) {
 }
 
 func TestRender_NoVariablesField(t *testing.T) {
-	svc := service.NewTemplateService(newFakeSource())
+	svc := service.NewTemplateService(newFakeSource(), nil)
 
 	project := domain.Project{
 		Name:     "myapp",
@@ -333,7 +374,7 @@ func TestRender_NoVariablesField(t *testing.T) {
 // --- Mount rendering tests ---
 
 func TestRender_NamedVolume(t *testing.T) {
-	svc := service.NewTemplateService(newFakeSource())
+	svc := service.NewTemplateService(newFakeSource(), nil)
 
 	project := domain.Project{Name: "myapp", Template: "base"}
 	mounts := domain.Mounts{
@@ -369,7 +410,7 @@ func TestRender_NamedVolume(t *testing.T) {
 }
 
 func TestRender_SecretFileBindMount(t *testing.T) {
-	svc := service.NewTemplateService(newFakeSource())
+	svc := service.NewTemplateService(newFakeSource(), nil)
 
 	project := domain.Project{Name: "myapp", Template: "base"}
 	mounts := domain.Mounts{
@@ -394,7 +435,7 @@ func TestRender_SecretFileBindMount(t *testing.T) {
 }
 
 func TestRender_SecretEnvVar(t *testing.T) {
-	svc := service.NewTemplateService(newFakeSource())
+	svc := service.NewTemplateService(newFakeSource(), nil)
 
 	project := domain.Project{Name: "myapp", Template: "base"}
 	mounts := domain.Mounts{
@@ -426,7 +467,7 @@ func TestRender_SecretEnvVar(t *testing.T) {
 }
 
 func TestRender_SocketMount(t *testing.T) {
-	svc := service.NewTemplateService(newFakeSource())
+	svc := service.NewTemplateService(newFakeSource(), nil)
 
 	project := domain.Project{Name: "myapp", Template: "base"}
 	mounts := domain.Mounts{
@@ -455,7 +496,7 @@ func TestRender_SocketMount(t *testing.T) {
 }
 
 func TestRender_EnvKeyCollision(t *testing.T) {
-	svc := service.NewTemplateService(newFakeSource())
+	svc := service.NewTemplateService(newFakeSource(), nil)
 
 	project := domain.Project{
 		Name:     "myapp",
@@ -487,7 +528,7 @@ func TestRender_EnvKeyCollision(t *testing.T) {
 }
 
 func TestRender_EnvironmentSorted(t *testing.T) {
-	svc := service.NewTemplateService(newFakeSource())
+	svc := service.NewTemplateService(newFakeSource(), nil)
 
 	project := domain.Project{
 		Name:     "myapp",
@@ -518,7 +559,7 @@ func TestRender_EnvironmentSorted(t *testing.T) {
 }
 
 func TestRender_ZeroMounts(t *testing.T) {
-	svc := service.NewTemplateService(newFakeSource())
+	svc := service.NewTemplateService(newFakeSource(), nil)
 
 	project := domain.Project{
 		Name:     "myapp",
@@ -544,5 +585,258 @@ func TestRender_ZeroMounts(t *testing.T) {
 
 	if !strings.Contains(out.Compose, "dockerfile: Dockerfile") {
 		t.Errorf("compose should have dockerfile 'Dockerfile'\nGot:\n%s", out.Compose)
+	}
+}
+
+// --- Companion rendering tests ---
+
+func TestRender_WithCompanions(t *testing.T) {
+	reg := service.NewCompanionRegistry()
+	svc := service.NewTemplateService(newFakeSource(), reg)
+
+	project := domain.Project{
+		Name:     "my-api",
+		Template: "base",
+		Services: []domain.ServiceConfig{
+			{Name: "postgres", Enabled: true},
+			{Name: "redis", Enabled: true},
+		},
+	}
+
+	out, err := svc.Render(project, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	// Postgres service block.
+	if !strings.Contains(out.Compose, "\n  postgres:\n") {
+		t.Errorf("compose missing postgres service block\nGot:\n%s", out.Compose)
+	}
+	if !strings.Contains(out.Compose, "image: postgres:16-alpine") {
+		t.Errorf("compose missing postgres image\nGot:\n%s", out.Compose)
+	}
+
+	// Redis service block.
+	if !strings.Contains(out.Compose, "\n  redis:\n") {
+		t.Errorf("compose missing redis service block\nGot:\n%s", out.Compose)
+	}
+	if !strings.Contains(out.Compose, "image: redis:7-alpine") {
+		t.Errorf("compose missing redis image\nGot:\n%s", out.Compose)
+	}
+
+	// Devcontainer still present.
+	if !strings.Contains(out.Compose, "devcontainer:") {
+		t.Errorf("compose missing devcontainer block\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_CompanionLabels(t *testing.T) {
+	reg := service.NewCompanionRegistry()
+	svc := service.NewTemplateService(newFakeSource(), reg)
+
+	project := domain.Project{
+		Name:     "my-api",
+		Template: "base",
+		Services: []domain.ServiceConfig{
+			{Name: "postgres", Enabled: true},
+		},
+	}
+
+	out, err := svc.Render(project, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(out.Compose, `dev.deckhand.service: "postgres"`) {
+		t.Errorf("compose missing deckhand service label for postgres\nGot:\n%s", out.Compose)
+	}
+	if !strings.Contains(out.Compose, `dev.deckhand.project: "my-api"`) {
+		t.Errorf("compose missing deckhand project label\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_CompanionPortsLocalhost(t *testing.T) {
+	reg := service.NewCompanionRegistry()
+	svc := service.NewTemplateService(newFakeSource(), reg)
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		Services: []domain.ServiceConfig{
+			{Name: "postgres", Enabled: true},
+		},
+	}
+
+	out, err := svc.Render(project, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(out.Compose, "127.0.0.1:5432:5432") {
+		t.Errorf("compose missing localhost-bound port for postgres\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_CompanionHealthcheck(t *testing.T) {
+	reg := service.NewCompanionRegistry()
+	svc := service.NewTemplateService(newFakeSource(), reg)
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		Services: []domain.ServiceConfig{
+			{Name: "postgres", Enabled: true},
+		},
+	}
+
+	out, err := svc.Render(project, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(out.Compose, `["CMD-SHELL", "pg_isready -U dev"]`) {
+		t.Errorf("compose missing healthcheck test for postgres\nGot:\n%s", out.Compose)
+	}
+	if !strings.Contains(out.Compose, "interval: 5s") {
+		t.Errorf("compose missing healthcheck interval\nGot:\n%s", out.Compose)
+	}
+	if !strings.Contains(out.Compose, "timeout: 3s") {
+		t.Errorf("compose missing healthcheck timeout\nGot:\n%s", out.Compose)
+	}
+	if !strings.Contains(out.Compose, "retries: 5") {
+		t.Errorf("compose missing healthcheck retries\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_CompanionVolumes(t *testing.T) {
+	reg := service.NewCompanionRegistry()
+	svc := service.NewTemplateService(newFakeSource(), reg)
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		Services: []domain.ServiceConfig{
+			{Name: "postgres", Enabled: true},
+		},
+	}
+
+	out, err := svc.Render(project, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	// Companion volume in service block.
+	if !strings.Contains(out.Compose, "myapp-postgres-data:/var/lib/postgresql/data") {
+		t.Errorf("compose missing postgres volume mount\nGot:\n%s", out.Compose)
+	}
+
+	// Top-level volume declaration.
+	if !strings.Contains(out.Compose, "volumes:\n  myapp-postgres-data:") {
+		t.Errorf("compose missing top-level postgres volume declaration\nGot:\n%s", out.Compose)
+	}
+
+	// Volume label uses service name.
+	if !strings.Contains(out.Compose, `dev.deckhand.service: "postgres"`) {
+		t.Errorf("compose missing service label on companion volume\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_NoCompanionsBackwardCompat(t *testing.T) {
+	svc := service.NewTemplateService(newFakeSource(), nil)
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+	}
+
+	out, err := svc.Render(project, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	// No companion blocks should appear.
+	if strings.Contains(out.Compose, "image:") {
+		t.Errorf("compose should not have image: when no companions selected\nGot:\n%s", out.Compose)
+	}
+	if strings.Contains(out.Compose, "healthcheck:") {
+		t.Errorf("compose should not have healthcheck when no companions selected\nGot:\n%s", out.Compose)
+	}
+	// Devcontainer should still be there.
+	if !strings.Contains(out.Compose, "devcontainer:") {
+		t.Errorf("compose missing devcontainer\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_DisabledCompanionSkipped(t *testing.T) {
+	reg := service.NewCompanionRegistry()
+	svc := service.NewTemplateService(newFakeSource(), reg)
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		Services: []domain.ServiceConfig{
+			{Name: "postgres", Enabled: false},
+		},
+	}
+
+	out, err := svc.Render(project, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if strings.Contains(out.Compose, "postgres:") {
+		t.Errorf("disabled companion should not appear in compose\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_UnknownCompanionError(t *testing.T) {
+	reg := service.NewCompanionRegistry()
+	svc := service.NewTemplateService(newFakeSource(), reg)
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		Services: []domain.ServiceConfig{
+			{Name: "mysql", Enabled: true},
+		},
+	}
+
+	_, err := svc.Render(project, domain.Mounts{})
+	if err == nil {
+		t.Fatal("expected error for unknown companion service, got nil")
+	}
+	if !strings.Contains(err.Error(), "mysql") {
+		t.Errorf("error should mention service name, got: %v", err)
+	}
+}
+
+func TestRender_CompanionEnvironmentSorted(t *testing.T) {
+	reg := service.NewCompanionRegistry()
+	svc := service.NewTemplateService(newFakeSource(), reg)
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		Services: []domain.ServiceConfig{
+			{Name: "postgres", Enabled: true},
+		},
+	}
+
+	out, err := svc.Render(project, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	// Postgres env vars should be sorted: POSTGRES_DB < POSTGRES_PASSWORD < POSTGRES_USER.
+	dbIdx := strings.Index(out.Compose, "POSTGRES_DB")
+	pwIdx := strings.Index(out.Compose, "POSTGRES_PASSWORD")
+	userIdx := strings.Index(out.Compose, "POSTGRES_USER")
+
+	if dbIdx < 0 || pwIdx < 0 || userIdx < 0 {
+		t.Fatalf("compose missing postgres env vars\nGot:\n%s", out.Compose)
+	}
+
+	if dbIdx >= pwIdx || pwIdx >= userIdx {
+		t.Errorf("postgres env vars not in alphabetical order\nGot:\n%s", out.Compose)
 	}
 }
