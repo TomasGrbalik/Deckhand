@@ -1,6 +1,8 @@
 package template_test
 
 import (
+	"errors"
+	ioFs "io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -166,6 +168,60 @@ func TestFilesystemSource_List_DefaultSourceLabel(t *testing.T) {
 	}
 	if result[0].Source != "user" {
 		t.Errorf("Source = %q, want %q", result[0].Source, "user")
+	}
+}
+
+func TestFilesystemSource_Load_MissingDirReturnsNotExist(t *testing.T) {
+	fs := &tmpl.FilesystemSource{Dir: t.TempDir()}
+
+	_, _, err := fs.Load("nonexistent")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, ioFs.ErrNotExist) {
+		t.Errorf("expected fs.ErrNotExist, got: %v", err)
+	}
+}
+
+func TestFilesystemSource_Load_IncompleteTemplateDoesNotReturnNotExist(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create template dir with only Dockerfile — missing compose.yaml.tmpl.
+	tmplDir := filepath.Join(dir, "partial")
+	if err := os.Mkdir(tmplDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmplDir, "Dockerfile.tmpl"), []byte("FROM ubuntu"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := &tmpl.FilesystemSource{Dir: dir}
+	_, _, err := fs.Load("partial")
+	if err == nil {
+		t.Fatal("expected error for incomplete template, got nil")
+	}
+	// The error should NOT be fs.ErrNotExist — the dir exists but a file is missing.
+	if errors.Is(err, ioFs.ErrNotExist) {
+		t.Error("incomplete template should not return fs.ErrNotExist (would cause silent fallthrough)")
+	}
+}
+
+func TestFilesystemSource_LoadMeta_IncompleteTemplateDoesNotReturnNotExist(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create template dir without metadata.yaml.
+	tmplDir := filepath.Join(dir, "partial")
+	if err := os.Mkdir(tmplDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := &tmpl.FilesystemSource{Dir: dir}
+	_, err := fs.LoadMeta("partial")
+	if err == nil {
+		t.Fatal("expected error for missing metadata, got nil")
+	}
+	if errors.Is(err, ioFs.ErrNotExist) {
+		t.Error("missing metadata in existing dir should not return fs.ErrNotExist")
 	}
 }
 

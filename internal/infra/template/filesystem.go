@@ -1,7 +1,9 @@
 package template
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -22,7 +24,10 @@ type FilesystemSource struct {
 }
 
 // Load reads the raw Dockerfile and compose template strings for the given
-// template name from the filesystem directory.
+// template name from the filesystem directory. Returns fs.ErrNotExist only
+// when the template directory itself is absent. Missing files within an
+// existing template directory produce a distinct error so that compositeSource
+// does not silently fall through on incomplete overrides.
 func (f *FilesystemSource) Load(name string) (dockerfile string, compose string, err error) {
 	base, err := f.templateDir(name)
 	if err != nil {
@@ -31,19 +36,19 @@ func (f *FilesystemSource) Load(name string) (dockerfile string, compose string,
 
 	df, err := os.ReadFile(filepath.Join(base, "Dockerfile.tmpl"))
 	if err != nil {
-		return "", "", fmt.Errorf("loading Dockerfile template %q: %w", name, err)
+		return "", "", f.fileError("Dockerfile template", name, err)
 	}
 
 	cf, err := os.ReadFile(filepath.Join(base, "compose.yaml.tmpl"))
 	if err != nil {
-		return "", "", fmt.Errorf("loading compose template %q: %w", name, err)
+		return "", "", f.fileError("compose template", name, err)
 	}
 
 	return string(df), string(cf), nil
 }
 
 // LoadMeta reads and parses metadata.yaml for the given template name from the
-// filesystem directory.
+// filesystem directory. Same error semantics as Load.
 func (f *FilesystemSource) LoadMeta(name string) (*domain.TemplateMeta, error) {
 	base, err := f.templateDir(name)
 	if err != nil {
@@ -51,7 +56,7 @@ func (f *FilesystemSource) LoadMeta(name string) (*domain.TemplateMeta, error) {
 	}
 	data, err := os.ReadFile(filepath.Join(base, "metadata.yaml"))
 	if err != nil {
-		return nil, fmt.Errorf("loading metadata for template %q: %w", name, err)
+		return nil, f.fileError("metadata", name, err)
 	}
 
 	var meta domain.TemplateMeta
@@ -62,14 +67,29 @@ func (f *FilesystemSource) LoadMeta(name string) (*domain.TemplateMeta, error) {
 	return &meta, nil
 }
 
+// fileError wraps a file read error. If the underlying error is fs.ErrNotExist
+// (file missing inside an existing template dir), it strips the ErrNotExist
+// so compositeSource doesn't treat it as "template not found".
+func (f *FilesystemSource) fileError(what, name string, err error) error {
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("loading %s for template %q: file not found", what, name)
+	}
+	return fmt.Errorf("loading %s for template %q: %w", what, name, err)
+}
+
 // templateDir validates a template name and returns the full directory path.
 // It rejects names containing path separators or traversal components.
+// Returns fs.ErrNotExist (wrapped) when the template directory does not exist.
 func (f *FilesystemSource) templateDir(name string) (string, error) {
 	clean := filepath.Clean(name)
 	if clean == "." || clean == ".." || clean != filepath.Base(clean) || strings.ContainsRune(clean, os.PathSeparator) {
 		return "", fmt.Errorf("invalid template name %q", name)
 	}
-	return filepath.Join(f.Dir, clean), nil
+	dir := filepath.Join(f.Dir, clean)
+	if _, err := os.Stat(dir); err != nil {
+		return "", fmt.Errorf("template %q: %w", name, err)
+	}
+	return dir, nil
 }
 
 // List returns TemplateInfo for every template in the directory that has a

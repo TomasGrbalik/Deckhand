@@ -35,9 +35,10 @@ func newTemplateListCmd() *cobra.Command {
 			}
 
 			dir, err := projectDir()
-			if err == nil {
-				sources = append(sources, localTemplateSource(dir))
+			if err != nil {
+				return fmt.Errorf("resolving project directory: %w", err)
 			}
+			sources = append(sources, localTemplateSource(dir))
 
 			registry := service.NewTemplateRegistry(sources...)
 
