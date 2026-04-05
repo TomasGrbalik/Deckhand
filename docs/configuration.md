@@ -124,7 +124,7 @@ Settings are resolved in this order (later wins):
 
 Running `deckhand up` renders templates into the `.deckhand/` directory:
 
-```
+```text
 .deckhand/
   Dockerfile
   docker-compose.yml

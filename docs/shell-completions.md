@@ -13,7 +13,7 @@ eval "$(deckhand completion bash)"
 Or install system-wide:
 
 ```bash
-deckhand completion bash > /etc/bash_completion.d/deckhand
+deckhand completion bash | sudo tee /etc/bash_completion.d/deckhand > /dev/null
 ```
 
 ## Zsh

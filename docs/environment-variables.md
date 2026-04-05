@@ -1,6 +1,6 @@
 # Environment Variables
 
-Deckhand reads two environment variables that override values in `.deckhand.yaml`.
+Deckhand reads two environment variables that override resolved config values (before CLI flags).
 
 | Variable | Overrides | Description |
 |----------|-----------|-------------|
