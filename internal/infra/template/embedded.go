@@ -30,6 +30,10 @@ func (e *EmbeddedSource) LoadMeta(name string) (*domain.TemplateMeta, error) {
 // Load reads the raw Dockerfile and compose template strings for the given
 // template name from the embedded filesystem. It does not render them —
 // rendering is the responsibility of the service layer (#5).
+//
+// The compose template is resolved with a fallback: if the template directory
+// contains its own compose.yaml.tmpl that file is used; otherwise the shared
+// compose.yaml.tmpl at the root of the embedded filesystem is used.
 func Load(name string) (dockerfile string, compose string, err error) {
 	base := name
 
@@ -40,7 +44,11 @@ func Load(name string) (dockerfile string, compose string, err error) {
 
 	cf, err := templates.FS.ReadFile(base + "/compose.yaml.tmpl")
 	if err != nil {
-		return "", "", fmt.Errorf("loading compose template %q: %w", name, err)
+		// Fall back to the shared compose template.
+		cf, err = templates.FS.ReadFile("compose.yaml.tmpl")
+		if err != nil {
+			return "", "", fmt.Errorf("loading compose template %q: %w", name, err)
+		}
 	}
 
 	return string(df), string(cf), nil
