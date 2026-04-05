@@ -2,8 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -30,14 +28,18 @@ func newTemplateListCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			embedded := &template.EmbeddedSource{}
 
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("resolving home directory: %w", err)
+			// Build registry: embedded → user → local (last wins for dedup).
+			sources := []service.TemplateLister{embedded}
+			if user := userTemplateSource(); user != nil {
+				sources = append(sources, user)
 			}
-			userDir := filepath.Join(home, ".config", "deckhand", "templates")
-			fs := &template.FilesystemSource{Dir: userDir}
 
-			registry := service.NewTemplateRegistry(embedded, fs)
+			dir, err := projectDir()
+			if err == nil {
+				sources = append(sources, localTemplateSource(dir))
+			}
+
+			registry := service.NewTemplateRegistry(sources...)
 
 			templates, err := registry.List()
 			if err != nil {

@@ -31,5 +31,5 @@ type TemplateMeta struct {
 type TemplateInfo struct {
 	Name        string
 	Description string
-	Source      string // "builtin" or "user"
+	Source      string // "builtin", "user", or "local"
 }

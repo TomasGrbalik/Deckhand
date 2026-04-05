@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -38,7 +37,7 @@ func newInitCmd() *cobra.Command {
 				return fmt.Errorf(".deckhand.yaml already exists in %s", dir)
 			}
 
-			initSvc := newInitService()
+			initSvc := newInitService(dir)
 
 			// --- Template selection ---
 			templateName := templateFlag
@@ -110,25 +109,27 @@ func newInitCmd() *cobra.Command {
 }
 
 // newInitService creates an InitService wired to real template sources.
-// The composite source tries user templates (filesystem) before falling back
-// to embedded, so user templates can override builtins for metadata loading.
-func newInitService() *service.InitService {
+// The composite source tries local → user → embedded, so project-local
+// templates take highest precedence for metadata loading.
+func newInitService(projectDir string) *service.InitService {
 	embedded := &template.EmbeddedSource{}
 	companions := service.NewCompanionRegistry()
+	local := localTemplateSource(projectDir)
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		// Fall back to embedded-only if we can't resolve home.
-		return service.NewInitService(
-			service.NewTemplateRegistry(embedded),
-			embedded,
-			companions,
-		)
+	// Build registry: embedded → user → local (last wins for dedup).
+	registrySources := []service.TemplateLister{embedded}
+	// Build composite: local → user → embedded (first match wins for Load).
+	compositeSources := []service.TemplateSource{local}
+
+	if user := userTemplateSource(); user != nil {
+		registrySources = append(registrySources, user)
+		compositeSources = append(compositeSources, user)
 	}
-	userDir := filepath.Join(home, ".config", "deckhand", "templates")
-	fs := &template.FilesystemSource{Dir: userDir}
-	registry := service.NewTemplateRegistry(embedded, fs)
-	source := &compositeSource{sources: []service.TemplateSource{fs, embedded}}
+	registrySources = append(registrySources, local)
+	compositeSources = append(compositeSources, embedded)
+
+	registry := service.NewTemplateRegistry(registrySources...)
+	source := &compositeSource{sources: compositeSources}
 
 	return service.NewInitService(registry, source, companions)
 }

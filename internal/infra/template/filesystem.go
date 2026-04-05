@@ -17,7 +17,8 @@ import (
 // EmbeddedSource but reads from the real filesystem, allowing user-provided
 // and overridden templates.
 type FilesystemSource struct {
-	Dir string // root directory containing template subdirectories
+	Dir         string // root directory containing template subdirectories
+	SourceLabel string // label for TemplateInfo.Source (e.g. "user", "local"); defaults to "user"
 }
 
 // Load reads the raw Dockerfile and compose template strings for the given
@@ -75,6 +76,17 @@ func (f *FilesystemSource) templateDir(name string) (string, error) {
 // valid metadata.yaml. If the directory does not exist, it returns an empty
 // slice (not an error). Templates with missing or bad metadata are skipped
 // with a log warning.
+func (f *FilesystemSource) sourceLabel() string {
+	if f.SourceLabel != "" {
+		return f.SourceLabel
+	}
+	return "user"
+}
+
+// List returns TemplateInfo for every template in the directory that has a
+// valid metadata.yaml. If the directory does not exist, it returns an empty
+// slice (not an error). Templates with missing or bad metadata are skipped
+// with a log warning.
 func (f *FilesystemSource) List() ([]domain.TemplateInfo, error) {
 	entries, err := os.ReadDir(f.Dir)
 	if err != nil {
@@ -84,6 +96,7 @@ func (f *FilesystemSource) List() ([]domain.TemplateInfo, error) {
 		return nil, fmt.Errorf("reading template directory %q: %w", f.Dir, err)
 	}
 
+	label := f.sourceLabel()
 	var result []domain.TemplateInfo
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -91,13 +104,13 @@ func (f *FilesystemSource) List() ([]domain.TemplateInfo, error) {
 		}
 		meta, err := f.LoadMeta(entry.Name())
 		if err != nil {
-			log.Printf("warning: skipping user template %q: %v", entry.Name(), err)
+			log.Printf("warning: skipping %s template %q: %v", label, entry.Name(), err)
 			continue
 		}
 		result = append(result, domain.TemplateInfo{
 			Name:        meta.Name,
 			Description: meta.Description,
-			Source:      "user",
+			Source:      label,
 		})
 	}
 	return result, nil

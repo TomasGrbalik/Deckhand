@@ -77,6 +77,54 @@ func TestRegistry_UserOverridesBuiltin(t *testing.T) {
 	}
 }
 
+func TestRegistry_LocalOverridesUserAndBuiltin(t *testing.T) {
+	builtin := &fakeTemplateLister{templates: []domain.TemplateInfo{
+		{Name: "base", Description: "Builtin Base", Source: "builtin"},
+		{Name: "go", Description: "Builtin Go", Source: "builtin"},
+	}}
+	user := &fakeTemplateLister{templates: []domain.TemplateInfo{
+		{Name: "base", Description: "User Base", Source: "user"},
+	}}
+	local := &fakeTemplateLister{templates: []domain.TemplateInfo{
+		{Name: "base", Description: "Local Base", Source: "local"},
+		{Name: "custom", Description: "Local Custom", Source: "local"},
+	}}
+
+	// Order: builtin → user → local (last wins).
+	reg := service.NewTemplateRegistry(builtin, user, local)
+	result, err := reg.List()
+	if err != nil {
+		t.Fatalf("List() error: %v", err)
+	}
+
+	if len(result) != 3 {
+		t.Fatalf("expected 3 templates, got %d", len(result))
+	}
+
+	names := map[string]string{}
+	descs := map[string]string{}
+	for _, tmpl := range result {
+		names[tmpl.Name] = tmpl.Source
+		descs[tmpl.Name] = tmpl.Description
+	}
+
+	// "base" should be overridden by local (last source).
+	if names["base"] != "local" {
+		t.Errorf("base source = %q, want \"local\"", names["base"])
+	}
+	if descs["base"] != "Local Base" {
+		t.Errorf("base description = %q, want \"Local Base\"", descs["base"])
+	}
+	// "go" should remain builtin (no override).
+	if names["go"] != "builtin" {
+		t.Errorf("go source = %q, want \"builtin\"", names["go"])
+	}
+	// "custom" should be local.
+	if names["custom"] != "local" {
+		t.Errorf("custom source = %q, want \"local\"", names["custom"])
+	}
+}
+
 func TestRegistry_EmptySources(t *testing.T) {
 	reg := service.NewTemplateRegistry(&fakeTemplateLister{}, &fakeTemplateLister{})
 	result, err := reg.List()

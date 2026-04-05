@@ -48,7 +48,7 @@ func newEnvironmentService(proj domain.Project, dir string) (*service.Environmen
 		return nil, err
 	}
 	svc := service.NewEnvironmentService(
-		&template.EmbeddedSource{},
+		templateSourceForProject(dir),
 		docker.NewCompose(),
 		nil, // no volume manager — commands that need it create one explicitly
 		globalCfg,
@@ -63,7 +63,7 @@ func newEnvironmentService(proj domain.Project, dir string) (*service.Environmen
 // down/status commands that don't need global config or mount merging.
 func newEnvironmentServiceForDown(proj domain.Project, dir string) *service.EnvironmentService {
 	return service.NewEnvironmentService(
-		&template.EmbeddedSource{},
+		templateSourceForProject(dir),
 		docker.NewCompose(),
 		nil,
 		domain.GlobalConfig{},
@@ -99,7 +99,7 @@ func newEnvironmentServiceWithVolumes(proj domain.Project, dir string) (*service
 
 	volMgr := newVolumeListerAdapter(docker.NewVolume(client.API()))
 	svc := service.NewEnvironmentService(
-		&template.EmbeddedSource{},
+		templateSourceForProject(dir),
 		docker.NewCompose(),
 		volMgr,
 		domain.GlobalConfig{},
@@ -209,6 +209,42 @@ func mapContainerInfos(infos []docker.ContainerInfo) []domain.Container {
 // dirName returns the base name of the given directory path.
 func dirName(dir string) string {
 	return filepath.Base(dir)
+}
+
+// localTemplateSource returns a FilesystemSource for project-local templates
+// in .deckhand/templates/ under the given project directory.
+func localTemplateSource(projectDir string) *template.FilesystemSource {
+	return &template.FilesystemSource{
+		Dir:         filepath.Join(projectDir, ".deckhand", "templates"),
+		SourceLabel: "local",
+	}
+}
+
+// userTemplateSource returns a FilesystemSource for user-global templates
+// in ~/.config/deckhand/templates/. Returns nil if the home directory cannot
+// be resolved.
+func userTemplateSource() *template.FilesystemSource {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	return &template.FilesystemSource{
+		Dir: filepath.Join(home, ".config", "deckhand", "templates"),
+	}
+}
+
+// templateSourceForProject builds a compositeSource that tries local templates
+// first, then user-global, then embedded. This gives local-first precedence
+// for Load/LoadMeta operations.
+func templateSourceForProject(projectDir string) service.TemplateSource {
+	embedded := &template.EmbeddedSource{}
+	local := localTemplateSource(projectDir)
+	sources := []service.TemplateSource{local}
+	if user := userTemplateSource(); user != nil {
+		sources = append(sources, user)
+	}
+	sources = append(sources, embedded)
+	return &compositeSource{sources: sources}
 }
 
 // compositeSource tries multiple TemplateSource implementations in order.

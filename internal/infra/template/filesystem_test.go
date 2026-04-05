@@ -118,6 +118,57 @@ func TestFilesystemSource_LoadMeta(t *testing.T) {
 	}
 }
 
+func TestFilesystemSource_List_CustomSourceLabel(t *testing.T) {
+	dir := t.TempDir()
+
+	rustDir := filepath.Join(dir, "rust")
+	if err := os.Mkdir(rustDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rustDir, "metadata.yaml"), []byte("name: rust\ndescription: Rust dev container\nvariables: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := &tmpl.FilesystemSource{Dir: dir, SourceLabel: "local"}
+	result, err := fs.List()
+	if err != nil {
+		t.Fatalf("List() error: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 template, got %d", len(result))
+	}
+	if result[0].Source != "local" {
+		t.Errorf("Source = %q, want %q", result[0].Source, "local")
+	}
+}
+
+func TestFilesystemSource_List_DefaultSourceLabel(t *testing.T) {
+	dir := t.TempDir()
+
+	goDir := filepath.Join(dir, "go")
+	if err := os.Mkdir(goDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(goDir, "metadata.yaml"), []byte("name: go\ndescription: Go dev container\nvariables: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// No SourceLabel set — should default to "user".
+	fs := &tmpl.FilesystemSource{Dir: dir}
+	result, err := fs.List()
+	if err != nil {
+		t.Fatalf("List() error: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 template, got %d", len(result))
+	}
+	if result[0].Source != "user" {
+		t.Errorf("Source = %q, want %q", result[0].Source, "user")
+	}
+}
+
 func TestFilesystemSource_Load_RejectsPathTraversal(t *testing.T) {
 	fs := &tmpl.FilesystemSource{Dir: t.TempDir()}
 
