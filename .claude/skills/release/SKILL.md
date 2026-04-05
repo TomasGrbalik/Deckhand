@@ -12,7 +12,7 @@ Create a new deckhand release by determining the version bump, running checks, a
 
 - Branch: !`git branch --show-current`
 - Latest tag: !`git describe --tags --abbrev=0 2>/dev/null || echo "none"`
-- Commits since last tag: !`git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --oneline --no-merges 2>/dev/null || git log --oneline --no-merges`
+- Recent commits: !`git log --oneline --no-merges -20`
 
 ## Workflow
 
