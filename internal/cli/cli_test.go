@@ -252,6 +252,27 @@ func TestConnectAcceptsValidHost(t *testing.T) {
 	}
 }
 
+func TestCompletionCommand(t *testing.T) {
+	shells := []string{"bash", "zsh", "fish"}
+
+	for _, shell := range shells {
+		t.Run(shell, func(t *testing.T) {
+			root := newRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetArgs([]string{"completion", shell})
+
+			if err := root.Execute(); err != nil {
+				t.Fatalf("completion %s: %v", shell, err)
+			}
+
+			if buf.Len() == 0 {
+				t.Fatalf("expected completion output for %s, got empty", shell)
+			}
+		})
+	}
+}
+
 func TestVersionFlag(t *testing.T) {
 	root := newRootCmd()
 	buf := new(bytes.Buffer)
