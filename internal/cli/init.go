@@ -69,6 +69,15 @@ func newInitCmd() *cobra.Command {
 				}
 			}
 
+			// --- Companion service selection ---
+			var selectedServices []string
+			if !templateFlagSet {
+				selectedServices, err = pickCompanions(initSvc)
+				if err != nil {
+					return err
+				}
+			}
+
 			// --- Project name ---
 			projectName := projectFlag
 			if !cmd.Flags().Changed("project") {
@@ -80,7 +89,7 @@ func newInitCmd() *cobra.Command {
 			}
 
 			// Build and save.
-			proj := initSvc.BuildProject(projectName, templateName, variables, meta)
+			proj := initSvc.BuildProject(projectName, templateName, variables, meta, selectedServices)
 			if err := config.Save(cfgPath, proj); err != nil {
 				return err
 			}
@@ -105,6 +114,7 @@ func newInitCmd() *cobra.Command {
 // to embedded, so user templates can override builtins for metadata loading.
 func newInitService() *service.InitService {
 	embedded := &template.EmbeddedSource{}
+	companions := service.NewCompanionRegistry()
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -112,6 +122,7 @@ func newInitService() *service.InitService {
 		return service.NewInitService(
 			service.NewTemplateRegistry(embedded),
 			embedded,
+			companions,
 		)
 	}
 	userDir := filepath.Join(home, ".config", "deckhand", "templates")
@@ -119,7 +130,7 @@ func newInitService() *service.InitService {
 	registry := service.NewTemplateRegistry(embedded, fs)
 	source := &compositeSource{sources: []service.TemplateSource{fs, embedded}}
 
-	return service.NewInitService(registry, source)
+	return service.NewInitService(registry, source, companions)
 }
 
 // pickTemplate shows an interactive template picker. If only one template
@@ -206,6 +217,36 @@ func editVariables(svc *service.InitService, meta *domain.TemplateMeta, defaults
 	}
 
 	return result, nil
+}
+
+// pickCompanions shows an interactive multi-select for companion services.
+// Returns the selected service names, or nil if none are available.
+func pickCompanions(svc *service.InitService) ([]string, error) {
+	companions := svc.ListCompanions()
+	if len(companions) == 0 {
+		return nil, nil
+	}
+
+	options := make([]huh.Option[string], len(companions))
+	for i, c := range companions {
+		label := fmt.Sprintf("%s — %s", c.Name, c.Description)
+		options[i] = huh.NewOption(label, c.Name)
+	}
+
+	var selected []string
+	err := huh.NewMultiSelect[string]().
+		Title("Select companion services (optional)").
+		Options(options...).
+		Value(&selected).
+		Run()
+	if err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return nil, errCanceled
+		}
+		return nil, fmt.Errorf("companion selection: %w", err)
+	}
+
+	return selected, nil
 }
 
 // promptProjectName asks for the project name with a default.

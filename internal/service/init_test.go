@@ -9,7 +9,7 @@ import (
 
 func newInitService(templates []domain.TemplateInfo, source *fakeSource) *service.InitService {
 	lister := &fakeTemplateLister{templates: templates}
-	return service.NewInitService(lister, source)
+	return service.NewInitService(lister, source, nil)
 }
 
 func TestInitService_ListTemplates(t *testing.T) {
@@ -140,7 +140,7 @@ func TestInitService_BuildProject_WithOverrides(t *testing.T) {
 		"debug":          "false", // same as default
 	}
 
-	proj := svc.BuildProject("my-api", "python", variables, meta)
+	proj := svc.BuildProject("my-api", "python", variables, meta, nil)
 
 	if proj.Name != "my-api" {
 		t.Errorf("Name = %q, want %q", proj.Name, "my-api")
@@ -170,7 +170,7 @@ func TestInitService_BuildProject_AllDefaults(t *testing.T) {
 		"python_version": "3.12", // same as default
 	}
 
-	proj := svc.BuildProject("my-api", "python", variables, meta)
+	proj := svc.BuildProject("my-api", "python", variables, meta, nil)
 
 	// No overrides → Variables should be nil (omitempty in YAML).
 	if proj.Variables != nil {
@@ -184,7 +184,7 @@ func TestInitService_BuildProject_SetsVersion(t *testing.T) {
 		Variables: map[string]domain.TemplateVariable{},
 	}
 
-	proj := svc.BuildProject("my-app", "base", map[string]string{}, meta)
+	proj := svc.BuildProject("my-app", "base", map[string]string{}, meta, nil)
 
 	if proj.Version != 1 {
 		t.Errorf("Version = %d, want 1", proj.Version)
@@ -197,7 +197,7 @@ func TestInitService_BuildProject_NoVariables(t *testing.T) {
 		Variables: map[string]domain.TemplateVariable{},
 	}
 
-	proj := svc.BuildProject("my-app", "base", map[string]string{}, meta)
+	proj := svc.BuildProject("my-app", "base", map[string]string{}, meta, nil)
 
 	if proj.Name != "my-app" {
 		t.Errorf("Name = %q, want %q", proj.Name, "my-app")
@@ -207,6 +207,97 @@ func TestInitService_BuildProject_NoVariables(t *testing.T) {
 	}
 	if proj.Variables != nil {
 		t.Errorf("expected nil Variables for template with no variables, got %v", proj.Variables)
+	}
+}
+
+// fakeCompanionLister implements service.CompanionLister for testing.
+type fakeCompanionLister struct {
+	services []domain.CompanionService
+}
+
+func (f *fakeCompanionLister) ListAvailable() []domain.CompanionService {
+	return f.services
+}
+
+func newInitServiceWithCompanions(companions *fakeCompanionLister) *service.InitService {
+	return service.NewInitService(&fakeTemplateLister{}, newFakeSource(), companions)
+}
+
+func TestInitService_ListCompanions(t *testing.T) {
+	companions := &fakeCompanionLister{
+		services: []domain.CompanionService{
+			{Name: "postgres", Description: "PostgreSQL"},
+			{Name: "redis", Description: "Redis"},
+		},
+	}
+	svc := newInitServiceWithCompanions(companions)
+
+	result := svc.ListCompanions()
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 companions, got %d", len(result))
+	}
+	if result[0].Name != "postgres" {
+		t.Errorf("first companion = %q, want %q", result[0].Name, "postgres")
+	}
+	if result[1].Name != "redis" {
+		t.Errorf("second companion = %q, want %q", result[1].Name, "redis")
+	}
+}
+
+func TestInitService_ListCompanions_NilLister(t *testing.T) {
+	svc := service.NewInitService(&fakeTemplateLister{}, newFakeSource(), nil)
+
+	result := svc.ListCompanions()
+
+	if result != nil {
+		t.Errorf("expected nil when no companion lister, got %v", result)
+	}
+}
+
+func TestInitService_BuildProject_WithServices(t *testing.T) {
+	svc := newInitService(nil, newFakeSource())
+	meta := &domain.TemplateMeta{
+		Variables: map[string]domain.TemplateVariable{},
+	}
+
+	proj := svc.BuildProject("my-app", "base", map[string]string{}, meta, []string{"postgres", "redis"})
+
+	if len(proj.Services) != 2 {
+		t.Fatalf("expected 2 services, got %d", len(proj.Services))
+	}
+	if proj.Services[0].Name != "postgres" || !proj.Services[0].Enabled {
+		t.Errorf("services[0] = %+v, want postgres enabled", proj.Services[0])
+	}
+	if proj.Services[1].Name != "redis" || !proj.Services[1].Enabled {
+		t.Errorf("services[1] = %+v, want redis enabled", proj.Services[1])
+	}
+}
+
+func TestInitService_BuildProject_NoServices(t *testing.T) {
+	svc := newInitService(nil, newFakeSource())
+	meta := &domain.TemplateMeta{
+		Variables: map[string]domain.TemplateVariable{},
+	}
+
+	proj := svc.BuildProject("my-app", "base", map[string]string{}, meta, nil)
+
+	if proj.Services != nil {
+		t.Errorf("expected nil Services when none selected, got %v", proj.Services)
+	}
+}
+
+func TestInitService_BuildProject_EmptyServices(t *testing.T) {
+	svc := newInitService(nil, newFakeSource())
+	meta := &domain.TemplateMeta{
+		Variables: map[string]domain.TemplateVariable{},
+	}
+
+	proj := svc.BuildProject("my-app", "base", map[string]string{}, meta, []string{})
+
+	// Empty slice should behave like nil — no services key in YAML.
+	if proj.Services != nil {
+		t.Errorf("expected nil Services when empty slice passed, got %v", proj.Services)
 	}
 }
 
