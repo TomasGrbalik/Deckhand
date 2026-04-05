@@ -21,7 +21,6 @@ func newRootCmd() *cobra.Command {
 	}
 
 	cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
-	cmd.CompletionOptions.DisableDefaultCmd = true
 
 	cmd.AddCommand(
 		newInitCmd(),
