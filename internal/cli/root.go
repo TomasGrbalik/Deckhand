@@ -34,6 +34,7 @@ func newRootCmd() *cobra.Command {
 		newPortCmd(),
 		newConnectCmd(),
 		newTemplateCmd(),
+		newDoctorCmd(),
 	)
 
 	return cmd
