@@ -12,15 +12,21 @@ Download the latest release for your platform:
 
 ```bash
 # Linux amd64
-curl -Lo deckhand https://github.com/TomasGrbalik/Deckhand/releases/latest/download/deckhand_linux_amd64
-chmod +x deckhand
+VERSION=$(curl -sL https://api.github.com/repos/TomasGrbalik/Deckhand/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')
+curl -Lo deckhand.tar.gz "https://github.com/TomasGrbalik/Deckhand/releases/latest/download/deckhand_${VERSION}_linux_amd64.tar.gz"
+tar xzf deckhand.tar.gz deckhand
 sudo mv deckhand /usr/local/bin/
+rm deckhand.tar.gz
 
 # Linux arm64
-curl -Lo deckhand https://github.com/TomasGrbalik/Deckhand/releases/latest/download/deckhand_linux_arm64
-chmod +x deckhand
+VERSION=$(curl -sL https://api.github.com/repos/TomasGrbalik/Deckhand/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')
+curl -Lo deckhand.tar.gz "https://github.com/TomasGrbalik/Deckhand/releases/latest/download/deckhand_${VERSION}_linux_arm64.tar.gz"
+tar xzf deckhand.tar.gz deckhand
 sudo mv deckhand /usr/local/bin/
+rm deckhand.tar.gz
 ```
+
+Each release includes a `checksums.txt` file for verification.
 
 ### go install
 

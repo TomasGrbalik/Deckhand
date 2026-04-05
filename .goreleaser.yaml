@@ -1,0 +1,39 @@
+version: 2
+
+builds:
+  - main: ./cmd/deckhand
+    binary: deckhand
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/TomasGrbalik/deckhand/internal/cli.Version={{.Version}}
+
+archives:
+  - format: tar.gz
+    name_template: "deckhand_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  groups:
+    - title: Breaking Changes
+      regexp: '^.*?!:'
+      order: 0
+    - title: Features
+      regexp: '^feat'
+      order: 1
+    - title: Bug Fixes
+      regexp: '^fix'
+      order: 2
+    - title: Other Changes
+      order: 999
+
+release:
+  draft: false

@@ -54,6 +54,27 @@ jobs:
       - name: Verify module integrity
         run: go mod verify
 
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          go build -ldflags "-s -w -X github.com/TomasGrbalik/deckhand/internal/cli.Version=ci" \
+            -o deckhand-${{ matrix.goos }}-${{ matrix.goarch }} \
+            ./cmd/deckhand
+
   version:
     runs-on: ubuntu-latest
     steps:
