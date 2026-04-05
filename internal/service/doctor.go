@@ -1,6 +1,11 @@
 package service
 
-import "github.com/TomasGrbalik/deckhand/internal/domain"
+import (
+	"errors"
+	"io/fs"
+
+	"github.com/TomasGrbalik/deckhand/internal/domain"
+)
 
 // CheckStatus represents the outcome of a single doctor check.
 type CheckStatus string
@@ -128,10 +133,17 @@ func (s *DoctorService) checkGlobalConfig() CheckResult {
 func (s *DoctorService) checkProjectConfig(dir string) (CheckResult, *domain.Project) {
 	proj, err := s.config.LoadProject(dir)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return CheckResult{
+				Name:    "Project config",
+				Status:  CheckSkip,
+				Message: "no .deckhand.yaml in current directory",
+			}, nil
+		}
 		return CheckResult{
 			Name:    "Project config",
-			Status:  CheckSkip,
-			Message: "no .deckhand.yaml in current directory",
+			Status:  CheckFail,
+			Message: err.Error(),
 		}, nil
 	}
 	return CheckResult{

@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"errors"
+	"io/fs"
 	"testing"
 
 	"github.com/TomasGrbalik/deckhand/internal/domain"
@@ -144,7 +145,7 @@ func TestDoctorMissingProjectConfig(t *testing.T) {
 		&fakeDockerChecker{composeVersion: "2.24.0"},
 		&fakeConfigLoader{
 			globalCfg:  &domain.GlobalConfig{},
-			projectErr: errors.New("not found"),
+			projectErr: fs.ErrNotExist,
 		},
 		&fakeTemplateSource{available: map[string]bool{}},
 	)
@@ -162,6 +163,27 @@ func TestDoctorMissingProjectConfig(t *testing.T) {
 	// Neither SKIP should cause HasFailures to be true.
 	if service.HasFailures(results) {
 		t.Error("HasFailures() should be false when checks are only SKIP")
+	}
+}
+
+func TestDoctorInvalidProjectConfig(t *testing.T) {
+	svc := service.NewDoctorService(
+		&fakeDockerChecker{composeVersion: "2.24.0"},
+		&fakeConfigLoader{
+			globalCfg:  &domain.GlobalConfig{},
+			projectErr: errors.New("parsing config: invalid YAML"),
+		},
+		&fakeTemplateSource{available: map[string]bool{}},
+	)
+
+	results := svc.RunChecks("/tmp/badconfig")
+
+	// Invalid config should be FAIL, not SKIP.
+	if results[3].Status != service.CheckFail {
+		t.Errorf("Project config: expected FAIL, got %s (%s)", results[3].Status, results[3].Message)
+	}
+	if !service.HasFailures(results) {
+		t.Error("HasFailures() should be true for invalid project config")
 	}
 }
 

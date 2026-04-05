@@ -68,7 +68,7 @@ type doctorConfigLoader struct{}
 func (d *doctorConfigLoader) LoadGlobal() (*domain.GlobalConfig, error) {
 	path, err := config.GlobalConfigPath()
 	if err != nil {
-		return &domain.GlobalConfig{}, nil //nolint:nilerr // path resolution non-fatal
+		return nil, fmt.Errorf("resolving global config path: %w", err)
 	}
 	return config.LoadGlobal(path)
 }
