@@ -36,6 +36,7 @@
     ]
   },
   "enabledPlugins": {
-    "github-issues@cc-plugins": true
+    "github-issues@cc-plugins": true,
+    "auto-release@cc-plugins": true
   }
 }

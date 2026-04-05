@@ -54,6 +54,17 @@ See `design/phases/` for full details. **Phase 1 — Skeleton & Core Lifecycle**
 - Container labels use `dev.deckhand.*` prefix for discovery.
 - All Docker ports bind to `127.0.0.1` only.
 
+## Commits and Releases
+
+- All commits must follow **Conventional Commits** format: `<type>[(scope)][!]: <description>`
+- Valid types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
+- A validation hook blocks non-conforming commit messages
+- Releases are manual: push a `v*` tag to trigger GoReleaser (builds Linux amd64+arm64 binaries)
+- Use the `/release` skill for a guided release flow, or tag manually:
+  ```bash
+  git tag -a v0.1.0 -m "Release v0.1.0" && git push origin v0.1.0
+  ```
+
 ## Quick Reference
 
 ```bash
