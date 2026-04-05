@@ -2,6 +2,8 @@ package cli
 
 import (
 	"errors"
+	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -40,13 +42,21 @@ func newRootCmd() *cobra.Command {
 	return cmd
 }
 
-// Execute runs the root command. If a subcommand returns errCanceled
-// (user pressed Ctrl+C during an interactive prompt), it returns nil
-// so main exits cleanly without printing an error.
+// Execute runs the root command. Errors are passed through humanizeError
+// to append actionable suggestions before display. If a subcommand returns
+// errCanceled (user pressed Ctrl+C during an interactive prompt), it returns
+// nil so main exits cleanly without printing an error.
 func Execute() error {
-	err := newRootCmd().Execute()
+	cmd := newRootCmd()
+	// Silence Cobra's default error printing so we can humanize errors ourselves.
+	cmd.SilenceErrors = true
+	err := cmd.Execute()
+	if err == nil {
+		return nil
+	}
 	if errors.Is(err, errCanceled) {
 		return nil
 	}
+	fmt.Fprintln(os.Stderr, "Error: "+humanizeError(err))
 	return err
 }
