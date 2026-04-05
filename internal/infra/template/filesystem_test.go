@@ -183,10 +183,11 @@ func TestFilesystemSource_Load_MissingDirReturnsNotExist(t *testing.T) {
 	}
 }
 
-func TestFilesystemSource_Load_IncompleteTemplateDoesNotReturnNotExist(t *testing.T) {
+func TestFilesystemSource_Load_FallsBackToSharedCompose(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create template dir with only Dockerfile — missing compose.yaml.tmpl.
+	// Create template dir with only Dockerfile — no compose.yaml.tmpl.
+	// The loader should fall back to the shared embedded compose template.
 	tmplDir := filepath.Join(dir, "partial")
 	if err := os.Mkdir(tmplDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -196,13 +197,42 @@ func TestFilesystemSource_Load_IncompleteTemplateDoesNotReturnNotExist(t *testin
 	}
 
 	fs := &tmpl.FilesystemSource{Dir: dir}
-	_, _, err := fs.Load("partial")
-	if err == nil {
-		t.Fatal("expected error for incomplete template, got nil")
+	dockerfile, compose, err := fs.Load("partial")
+	if err != nil {
+		t.Fatalf("Load() should succeed with shared compose fallback, got: %v", err)
 	}
-	// The error should NOT be fs.ErrNotExist — the dir exists but a file is missing.
-	if errors.Is(err, ioFs.ErrNotExist) {
-		t.Error("incomplete template should not return fs.ErrNotExist (would cause silent fallthrough)")
+	if dockerfile != "FROM ubuntu" {
+		t.Errorf("Dockerfile = %q, want %q", dockerfile, "FROM ubuntu")
+	}
+	if compose == "" {
+		t.Error("compose should not be empty — shared fallback should provide it")
+	}
+}
+
+func TestFilesystemSource_Load_UsesTemplateComposeOverride(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create template dir with both Dockerfile and a custom compose.yaml.tmpl.
+	// The loader should use the template's own compose, not the shared one.
+	tmplDir := filepath.Join(dir, "custom")
+	if err := os.Mkdir(tmplDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmplDir, "Dockerfile.tmpl"), []byte("FROM alpine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	customCompose := "services:\n  custom: {}"
+	if err := os.WriteFile(filepath.Join(tmplDir, "compose.yaml.tmpl"), []byte(customCompose), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := &tmpl.FilesystemSource{Dir: dir}
+	_, compose, err := fs.Load("custom")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if compose != customCompose {
+		t.Errorf("compose = %q, want template-specific %q", compose, customCompose)
 	}
 }
 

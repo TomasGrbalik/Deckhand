@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/TomasGrbalik/deckhand/internal/domain"
+	"github.com/TomasGrbalik/deckhand/templates"
 )
 
 // FilesystemSource loads templates from a directory on disk (e.g.
@@ -28,6 +29,10 @@ type FilesystemSource struct {
 // when the template directory itself is absent. Missing files within an
 // existing template directory produce a distinct error so that compositeSource
 // does not silently fall through on incomplete overrides.
+//
+// The compose template is resolved with a fallback: if the template directory
+// contains its own compose.yaml.tmpl that file is used; otherwise the shared
+// compose.yaml.tmpl from the embedded filesystem is used.
 func (f *FilesystemSource) Load(name string) (dockerfile string, compose string, err error) {
 	base, err := f.templateDir(name)
 	if err != nil {
@@ -41,7 +46,15 @@ func (f *FilesystemSource) Load(name string) (dockerfile string, compose string,
 
 	cf, err := os.ReadFile(filepath.Join(base, "compose.yaml.tmpl"))
 	if err != nil {
-		return "", "", f.fileError("compose template", name, err)
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", "", f.fileError("compose template", name, err)
+		}
+		// Fall back to the shared compose template from the embedded filesystem.
+		shared, sErr := templates.FS.ReadFile("compose.yaml.tmpl")
+		if sErr != nil {
+			return "", "", f.fileError("compose template", name, sErr)
+		}
+		cf = shared
 	}
 
 	return string(df), string(cf), nil
