@@ -7,17 +7,25 @@ import (
 	"github.com/TomasGrbalik/deckhand/internal/domain"
 )
 
+// CompanionLister returns the available companion services for selection.
+// The CompanionRegistry satisfies this interface.
+type CompanionLister interface {
+	ListAvailable() []domain.CompanionService
+}
+
 // InitService handles the business logic for initializing a new project.
 // It discovers templates, validates selections, and builds project configs.
 // No UI/CLI imports — form interaction stays in the CLI layer.
 type InitService struct {
-	lister TemplateLister
-	source TemplateSource
+	lister     TemplateLister
+	source     TemplateSource
+	companions CompanionLister
 }
 
 // NewInitService creates an InitService with the given template lister and source.
-func NewInitService(lister TemplateLister, source TemplateSource) *InitService {
-	return &InitService{lister: lister, source: source}
+// An optional CompanionLister can be provided for companion service selection.
+func NewInitService(lister TemplateLister, source TemplateSource, companions CompanionLister) *InitService {
+	return &InitService{lister: lister, source: source, companions: companions}
 }
 
 // ListTemplates returns all available templates.
@@ -73,9 +81,19 @@ func (s *InitService) SortedVariableNames(meta *domain.TemplateMeta) []string {
 	return names
 }
 
+// ListCompanions returns the available companion services for selection.
+// Returns nil if no CompanionLister was provided.
+func (s *InitService) ListCompanions() []domain.CompanionService {
+	if s.companions == nil {
+		return nil
+	}
+	return s.companions.ListAvailable()
+}
+
 // BuildProject creates a domain.Project from the given inputs.
 // Variables are only included if they differ from template defaults.
-func (s *InitService) BuildProject(projectName, templateName string, variables map[string]string, meta *domain.TemplateMeta) *domain.Project {
+// Selected service names produce ServiceConfig entries with Enabled=true.
+func (s *InitService) BuildProject(projectName, templateName string, variables map[string]string, meta *domain.TemplateMeta, selectedServices []string) *domain.Project {
 	// Only store variables that differ from defaults.
 	overrides := make(map[string]string)
 	for k, v := range variables {
@@ -91,6 +109,17 @@ func (s *InitService) BuildProject(projectName, templateName string, variables m
 	}
 	if len(overrides) > 0 {
 		proj.Variables = overrides
+	}
+
+	if len(selectedServices) > 0 {
+		services := make([]domain.ServiceConfig, len(selectedServices))
+		for i, name := range selectedServices {
+			services[i] = domain.ServiceConfig{
+				Name:    name,
+				Enabled: true,
+			}
+		}
+		proj.Services = services
 	}
 
 	return proj
