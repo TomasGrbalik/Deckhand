@@ -52,7 +52,7 @@ func (f *FilesystemSource) Load(name string) (dockerfile string, compose string,
 		// Fall back to the shared compose template from the embedded filesystem.
 		shared, sErr := templates.FS.ReadFile("compose.yaml.tmpl")
 		if sErr != nil {
-			return "", "", f.fileError("compose template", name, err)
+			return "", "", f.fileError("compose template", name, sErr)
 		}
 		cf = shared
 	}
