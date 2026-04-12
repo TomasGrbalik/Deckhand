@@ -3,6 +3,7 @@ package service_test
 import (
 	"errors"
 	"io/fs"
+	"strings"
 	"testing"
 
 	"github.com/TomasGrbalik/deckhand/internal/domain"
@@ -14,10 +15,15 @@ type fakeDockerChecker struct {
 	pingErr        error
 	composeVersion string
 	composeErr     error
+	networkExists  bool
+	networkErr     error
 }
 
 func (f *fakeDockerChecker) Ping() error                     { return f.pingErr }
 func (f *fakeDockerChecker) ComposeVersion() (string, error) { return f.composeVersion, f.composeErr }
+func (f *fakeDockerChecker) NetworkExists(_ string) (bool, error) {
+	return f.networkExists, f.networkErr
+}
 
 // fakeConfigLoader implements service.ConfigLoader for testing.
 type fakeConfigLoader struct {
@@ -66,16 +72,21 @@ func TestDoctorAllPass(t *testing.T) {
 
 	results := svc.RunChecks("/tmp/myapp")
 
-	if len(results) != 5 {
-		t.Fatalf("expected 5 results, got %d", len(results))
+	if len(results) != 6 {
+		t.Fatalf("expected 6 results, got %d", len(results))
 	}
 	for _, r := range results {
-		if r.Status != service.CheckPass {
-			t.Errorf("%s: expected PASS, got %s (%s)", r.Name, r.Status, r.Message)
+		if r.Status == service.CheckFail {
+			t.Errorf("%s: unexpected FAIL (%s)", r.Name, r.Message)
 		}
 	}
+	// Network check should be SKIP when no network is configured.
+	networkResult := results[5]
+	if networkResult.Status != service.CheckSkip {
+		t.Errorf("Docker network: expected SKIP (no config), got %s (%s)", networkResult.Status, networkResult.Message)
+	}
 	if service.HasFailures(results) {
-		t.Error("HasFailures() should be false when all checks pass")
+		t.Error("HasFailures() should be false when all checks pass or skip")
 	}
 }
 
@@ -95,8 +106,8 @@ func TestDoctorDockerFail(t *testing.T) {
 		t.Errorf("Docker daemon: expected FAIL, got %s", results[0].Status)
 	}
 	// All checks should still run.
-	if len(results) != 5 {
-		t.Fatalf("expected 5 results (no short-circuit), got %d", len(results))
+	if len(results) != 6 {
+		t.Fatalf("expected 6 results (no short-circuit), got %d", len(results))
 	}
 	if !service.HasFailures(results) {
 		t.Error("HasFailures() should be true")
@@ -201,5 +212,74 @@ func TestDoctorTemplateMissing(t *testing.T) {
 
 	if results[4].Status != service.CheckFail {
 		t.Errorf("Template: expected FAIL, got %s", results[4].Status)
+	}
+}
+
+func TestDoctorNetworkExists(t *testing.T) {
+	svc := service.NewDoctorService(
+		&fakeDockerChecker{composeVersion: "2.24.0", networkExists: true},
+		&fakeConfigLoader{
+			globalCfg: &domain.GlobalConfig{
+				Network: domain.NetworkConfig{
+					Name:    "ssh-net",
+					Subnet:  "172.30.0.0/24",
+					Gateway: "172.30.0.1",
+				},
+			},
+			projectCfg: &domain.Project{Name: "myapp", Template: "go"},
+		},
+		&fakeTemplateSource{available: map[string]bool{"go": true}},
+	)
+
+	results := svc.RunChecks("/tmp/myapp")
+
+	networkResult := results[5]
+	if networkResult.Status != service.CheckPass {
+		t.Errorf("Docker network: expected PASS, got %s (%s)", networkResult.Status, networkResult.Message)
+	}
+}
+
+func TestDoctorNetworkMissing(t *testing.T) {
+	svc := service.NewDoctorService(
+		&fakeDockerChecker{composeVersion: "2.24.0", networkExists: false},
+		&fakeConfigLoader{
+			globalCfg: &domain.GlobalConfig{
+				Network: domain.NetworkConfig{
+					Name:    "ssh-net",
+					Subnet:  "172.30.0.0/24",
+					Gateway: "172.30.0.1",
+				},
+			},
+			projectCfg: &domain.Project{Name: "myapp", Template: "go"},
+		},
+		&fakeTemplateSource{available: map[string]bool{"go": true}},
+	)
+
+	results := svc.RunChecks("/tmp/myapp")
+
+	networkResult := results[5]
+	if networkResult.Status != service.CheckFail {
+		t.Errorf("Docker network: expected FAIL, got %s (%s)", networkResult.Status, networkResult.Message)
+	}
+	if !strings.Contains(networkResult.Message, "docker network create") {
+		t.Errorf("error should include create command, got: %s", networkResult.Message)
+	}
+}
+
+func TestDoctorNetworkSkipWhenNotConfigured(t *testing.T) {
+	svc := service.NewDoctorService(
+		&fakeDockerChecker{composeVersion: "2.24.0"},
+		&fakeConfigLoader{
+			globalCfg:  &domain.GlobalConfig{},
+			projectCfg: &domain.Project{Name: "myapp", Template: "go"},
+		},
+		&fakeTemplateSource{available: map[string]bool{"go": true}},
+	)
+
+	results := svc.RunChecks("/tmp/myapp")
+
+	networkResult := results[5]
+	if networkResult.Status != service.CheckSkip {
+		t.Errorf("Docker network: expected SKIP, got %s (%s)", networkResult.Status, networkResult.Message)
 	}
 }

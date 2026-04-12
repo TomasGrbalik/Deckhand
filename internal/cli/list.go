@@ -8,7 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/TomasGrbalik/deckhand/internal/config"
 	"github.com/TomasGrbalik/deckhand/internal/domain"
+	"github.com/TomasGrbalik/deckhand/internal/service"
 )
 
 func newListCmd() *cobra.Command {
@@ -32,14 +34,38 @@ func newListCmd() *cobra.Command {
 				return nil
 			}
 
+			// Check if network is configured for IP column.
+			globalCfg, cfgErr := loadGlobalConfig()
+			showIPColumn := cfgErr == nil && globalCfg.Network.IsConfigured()
+			networkState := &service.NetworkState{Assignments: map[string]string{}}
+			if showIPColumn {
+				statePath, pathErr := config.NetworkStatePath()
+				if pathErr == nil {
+					if loaded, loadErr := service.LoadNetworkState(statePath); loadErr == nil {
+						networkState = loaded
+					}
+				}
+			}
+
 			// Group containers by project.
 			projects := groupByProject(containers)
 
 			out := cmd.OutOrStdout()
 			w := tabwriter.NewWriter(out, 0, 0, 3, ' ', 0)
-			fmt.Fprintln(w, "PROJECT\tSTATUS\tSERVICES\tUPTIME")
-			for _, p := range projects {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.name, p.status, p.services, p.uptime)
+			if showIPColumn {
+				fmt.Fprintln(w, "PROJECT\tSTATUS\tIP\tSERVICES\tUPTIME")
+				for _, p := range projects {
+					ip := service.ProjectIP(networkState, p.name)
+					if ip == "" {
+						ip = "—"
+					}
+					fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", p.name, p.status, ip, p.services, p.uptime)
+				}
+			} else {
+				fmt.Fprintln(w, "PROJECT\tSTATUS\tSERVICES\tUPTIME")
+				for _, p := range projects {
+					fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.name, p.status, p.services, p.uptime)
+				}
 			}
 			return w.Flush()
 		},

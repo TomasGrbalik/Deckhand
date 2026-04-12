@@ -330,6 +330,8 @@ type templateData struct {
 	NamedVolumes     []NamedVolumeEntry
 	Companions       []CompanionTemplateData
 	CompanionVolumes []CompanionVolumeEntry
+	NetworkName      string
+	NetworkIP        string
 }
 
 // renderCompose is a test helper that loads, parses, and executes a

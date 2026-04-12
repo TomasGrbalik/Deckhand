@@ -6,6 +6,7 @@ type GlobalConfig struct {
 	Defaults GlobalDefaults `yaml:"defaults"`
 	SSH      SSHConfig      `yaml:"ssh"`
 	Mounts   Mounts         `yaml:"mounts"`
+	Network  NetworkConfig  `yaml:"network"`
 }
 
 // GlobalDefaults holds default settings that apply to all projects

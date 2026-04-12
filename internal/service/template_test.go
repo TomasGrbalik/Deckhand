@@ -63,6 +63,12 @@ const fakeCompose = `services:
       {{ .Key }}: {{ printf "%q" .Value }}
 {{- end }}
 {{- end }}
+{{- if .NetworkName }}
+    networks:
+      default: {}
+      {{ .NetworkName }}:
+        ipv4_address: {{ .NetworkIP }}
+{{- end }}
     command: sleep infinity
 {{- range .Companions }}
 
@@ -97,6 +103,10 @@ const fakeCompose = `services:
       - {{ .ComposeEntry }}
 {{- end }}
 {{- end }}
+{{- if $.NetworkName }}
+    networks:
+      default: {}
+{{- end }}
 {{- end }}
 {{- if or .NamedVolumes .CompanionVolumes }}
 
@@ -115,6 +125,12 @@ volumes:
       dev.deckhand.project: "{{ $.Name }}"
       dev.deckhand.service: "{{ .ServiceName }}"
 {{- end }}
+{{- end }}
+{{- if .NetworkName }}
+
+networks:
+  {{ .NetworkName }}:
+    external: true
 {{- end }}
 `
 
@@ -838,5 +854,92 @@ func TestRender_CompanionEnvironmentSorted(t *testing.T) {
 
 	if dbIdx >= pwIdx || pwIdx >= userIdx {
 		t.Errorf("postgres env vars not in alphabetical order\nGot:\n%s", out.Compose)
+	}
+}
+
+// --- Network rendering tests ---
+
+func TestRender_WithNetwork(t *testing.T) {
+	svc := service.NewTemplateService(newFakeSource(), nil)
+
+	project := domain.Project{Name: "myapp", Template: "base"}
+	opts := service.RenderOpts{
+		NetworkName: "ssh-net",
+		NetworkIP:   "172.30.0.10",
+	}
+
+	out, err := svc.Render(project, domain.Mounts{}, opts)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	// Devcontainer should have network config.
+	if !strings.Contains(out.Compose, "ssh-net:") {
+		t.Errorf("compose missing network name\nGot:\n%s", out.Compose)
+	}
+	if !strings.Contains(out.Compose, "ipv4_address: 172.30.0.10") {
+		t.Errorf("compose missing static IP\nGot:\n%s", out.Compose)
+	}
+
+	// Top-level networks block.
+	if !strings.Contains(out.Compose, "networks:\n  ssh-net:\n    external: true") {
+		t.Errorf("compose missing top-level networks block\nGot:\n%s", out.Compose)
+	}
+}
+
+func TestRender_WithNetworkAndCompanions(t *testing.T) {
+	reg := service.NewCompanionRegistry()
+	svc := service.NewTemplateService(newFakeSource(), reg)
+
+	project := domain.Project{
+		Name:     "myapp",
+		Template: "base",
+		Services: []domain.ServiceConfig{
+			{Name: "postgres", Enabled: true},
+		},
+	}
+	opts := service.RenderOpts{
+		NetworkName: "ssh-net",
+		NetworkIP:   "172.30.0.10",
+	}
+
+	out, err := svc.Render(project, domain.Mounts{}, opts)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	// Devcontainer has dual-homed network (default + ssh-net with IP).
+	if !strings.Contains(out.Compose, "ipv4_address: 172.30.0.10") {
+		t.Errorf("compose missing devcontainer static IP\nGot:\n%s", out.Compose)
+	}
+
+	// Companion (postgres) should have networks: default only, no IP.
+	// Find the postgres section and check it has "networks:\n      default: {}"
+	pgIdx := strings.Index(out.Compose, "  postgres:")
+	if pgIdx < 0 {
+		t.Fatalf("compose missing postgres block\nGot:\n%s", out.Compose)
+	}
+	pgSection := out.Compose[pgIdx:]
+	if !strings.Contains(pgSection, "networks:\n      default: {}") {
+		t.Errorf("companion should have networks: default only\nGot:\n%s", pgSection)
+	}
+	if strings.Contains(pgSection, "ipv4_address") {
+		t.Errorf("companion should not have static IP\nGot:\n%s", pgSection)
+	}
+}
+
+func TestRender_NoNetwork(t *testing.T) {
+	svc := service.NewTemplateService(newFakeSource(), nil)
+
+	project := domain.Project{Name: "myapp", Template: "base"}
+
+	out, err := svc.Render(project, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	// No networks section should appear.
+	if strings.Contains(out.Compose, "networks:") {
+		t.Errorf("compose should not have networks section without network config\nGot:\n%s", out.Compose)
 	}
 }

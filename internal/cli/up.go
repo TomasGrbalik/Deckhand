@@ -23,9 +23,12 @@ func newUpCmd() *cobra.Command {
 				return err
 			}
 
-			svc, err := newEnvironmentService(*proj, dir)
+			svc, cleanup, err := newEnvironmentService(*proj, dir)
 			if err != nil {
 				return err
+			}
+			if cleanup != nil {
+				defer cleanup()
 			}
 
 			if err := svc.Up(build); err != nil {

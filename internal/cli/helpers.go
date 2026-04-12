@@ -41,11 +41,13 @@ func stderrLogger(format string, args ...any) {
 }
 
 // newEnvironmentService creates an EnvironmentService wired to real infra.
-// It loads the global config for mount merging during Up.
-func newEnvironmentService(proj domain.Project, dir string) (*service.EnvironmentService, error) {
+// It loads the global config for mount merging during Up. If the global
+// config has a network block, it also wires up a Docker network checker
+// and the network state path.
+func newEnvironmentService(proj domain.Project, dir string) (*service.EnvironmentService, func(), error) {
 	globalCfg, err := loadGlobalConfig()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	svc := service.NewEnvironmentService(
 		templateSourceForProject(dir),
@@ -56,7 +58,22 @@ func newEnvironmentService(proj domain.Project, dir string) (*service.Environmen
 		dir,
 	)
 	svc.SetLogger(stderrLogger)
-	return svc, nil
+
+	cleanup := func() {}
+	if globalCfg.Network.IsConfigured() {
+		statePath, pathErr := config.NetworkStatePath()
+		if pathErr != nil {
+			return nil, nil, fmt.Errorf("resolving network state path: %w", pathErr)
+		}
+		client, clientErr := docker.NewClient(context.Background())
+		if clientErr != nil {
+			return nil, nil, fmt.Errorf("connecting to docker: %w", clientErr)
+		}
+		cleanup = func() { _ = client.Close() }
+		svc.SetNetworkSupport(docker.NewNetwork(client.API()), statePath)
+	}
+
+	return svc, cleanup, nil
 }
 
 // newEnvironmentServiceForDown creates a lightweight EnvironmentService for
@@ -89,8 +106,13 @@ func loadGlobalConfig() (domain.GlobalConfig, error) {
 
 // newEnvironmentServiceWithVolumes creates an EnvironmentService with volume
 // management support. Used by destroy which needs to discover and remove
-// labeled volumes. Does not load global config — destroy doesn't use mounts.
+// labeled volumes and free network IPs.
 func newEnvironmentServiceWithVolumes(proj domain.Project, dir string) (*service.EnvironmentService, func(), error) {
+	globalCfg, err := loadGlobalConfig()
+	if err != nil {
+		return nil, nil, err
+	}
+
 	client, err := docker.NewClient(context.Background())
 	if err != nil {
 		return nil, nil, fmt.Errorf("connecting to docker: %w", err)
@@ -102,11 +124,21 @@ func newEnvironmentServiceWithVolumes(proj domain.Project, dir string) (*service
 		templateSourceForProject(dir),
 		docker.NewCompose(),
 		volMgr,
-		domain.GlobalConfig{},
+		globalCfg,
 		proj,
 		dir,
 	)
 	svc.SetLogger(stderrLogger)
+
+	if globalCfg.Network.IsConfigured() {
+		statePath, pathErr := config.NetworkStatePath()
+		if pathErr != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("resolving network state path: %w", pathErr)
+		}
+		svc.SetNetworkSupport(nil, statePath) // No checker needed for destroy.
+	}
+
 	return svc, cleanup, nil
 }
 

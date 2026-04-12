@@ -61,6 +61,16 @@ func (d *doctorDockerChecker) ComposeVersion() (string, error) {
 	return docker.NewCompose().ComposeVersion()
 }
 
+// NetworkExists implements service.DockerChecker.
+func (d *doctorDockerChecker) NetworkExists(name string) (bool, error) {
+	client, err := docker.NewClient(context.Background())
+	if err != nil {
+		return false, err
+	}
+	defer client.Close()
+	return docker.NewNetwork(client.API()).NetworkExists(name)
+}
+
 // doctorConfigLoader adapts real config loading to the service.ConfigLoader interface.
 type doctorConfigLoader struct{}
 

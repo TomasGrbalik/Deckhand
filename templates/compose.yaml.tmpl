@@ -28,6 +28,12 @@ services:
       {{ .Key }}: {{ printf "%q" .Value }}
 {{- end }}
 {{- end }}
+{{- if .NetworkName }}
+    networks:
+      default: {}
+      {{ .NetworkName }}:
+        ipv4_address: {{ .NetworkIP }}
+{{- end }}
     command: sleep infinity
 {{- range .Companions }}
 
@@ -62,6 +68,10 @@ services:
       - {{ .ComposeEntry }}
 {{- end }}
 {{- end }}
+{{- if $.NetworkName }}
+    networks:
+      default: {}
+{{- end }}
 {{- end }}
 {{- if or .NamedVolumes .CompanionVolumes }}
 
@@ -80,4 +90,10 @@ volumes:
       dev.deckhand.project: "{{ $.Name }}"
       dev.deckhand.service: "{{ .ServiceName }}"
 {{- end }}
+{{- end }}
+{{- if .NetworkName }}
+
+networks:
+  {{ .NetworkName }}:
+    external: true
 {{- end }}

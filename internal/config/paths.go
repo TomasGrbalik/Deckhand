@@ -27,3 +27,14 @@ func GlobalConfigPath() (string, error) {
 	}
 	return filepath.Join(configDir, "deckhand", "config.yaml"), nil
 }
+
+// NetworkStatePath returns the path to the network state file that tracks
+// project-to-IP assignments. Returns empty string if the config dir can't
+// be resolved.
+func NetworkStatePath() (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "deckhand", "network-state.yaml"), nil
+}
