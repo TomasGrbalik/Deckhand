@@ -39,16 +39,23 @@ type VolumeManager interface {
 	Remove(volumeName string) error
 }
 
+// NetworkChecker verifies that a Docker network exists.
+type NetworkChecker interface {
+	NetworkExists(name string) (bool, error)
+}
+
 // EnvironmentService orchestrates the full dev container lifecycle.
 // CLI commands call Up, Down, and Destroy through this service.
 type EnvironmentService struct {
-	templates    TemplateSource
-	compose      ComposeRunner
-	volumes      VolumeManager
-	project      domain.Project
-	globalConfig domain.GlobalConfig
-	projectDir   string
-	logger       func(format string, args ...any)
+	templates        TemplateSource
+	compose          ComposeRunner
+	volumes          VolumeManager
+	networkChecker   NetworkChecker
+	networkStatePath string
+	project          domain.Project
+	globalConfig     domain.GlobalConfig
+	projectDir       string
+	logger           func(format string, args ...any)
 }
 
 // NewEnvironmentService creates an EnvironmentService.
@@ -76,6 +83,14 @@ func NewEnvironmentService(
 // If not set, warnings are silently discarded.
 func (s *EnvironmentService) SetLogger(fn func(format string, args ...any)) {
 	s.logger = fn
+}
+
+// SetNetworkSupport configures Docker network checking and IP state
+// management. checker may be nil (e.g., for destroy which doesn't need
+// to verify the network). statePath is the path to network-state.yaml.
+func (s *EnvironmentService) SetNetworkSupport(checker NetworkChecker, statePath string) {
+	s.networkChecker = checker
+	s.networkStatePath = statePath
 }
 
 func (s *EnvironmentService) logf(format string, args ...any) {
@@ -110,7 +125,16 @@ func (s *EnvironmentService) Up(build bool) error {
 		s.logf("warning: %s", w)
 	}
 
-	out, err := tmplSvc.Render(s.project, resolved)
+	var renderOpts RenderOpts
+	if s.globalConfig.Network.IsConfigured() {
+		netOpts, netErr := s.allocateNetwork()
+		if netErr != nil {
+			return netErr
+		}
+		renderOpts = netOpts
+	}
+
+	out, err := tmplSvc.Render(s.project, resolved, renderOpts)
 	if err != nil {
 		return fmt.Errorf("rendering templates: %w", err)
 	}
@@ -135,6 +159,45 @@ func (s *EnvironmentService) Up(build bool) error {
 	}
 
 	return nil
+}
+
+// allocateNetwork checks that the configured Docker network exists and
+// allocates (or reuses) a static IP for this project.
+func (s *EnvironmentService) allocateNetwork() (RenderOpts, error) {
+	net := s.globalConfig.Network
+
+	if s.networkChecker != nil {
+		exists, err := s.networkChecker.NetworkExists(net.Name)
+		if err != nil {
+			return RenderOpts{}, fmt.Errorf("checking network: %w", err)
+		}
+		if !exists {
+			return RenderOpts{}, fmt.Errorf(
+				"network %q does not exist — create it with:\n  docker network create --driver=bridge --subnet=%s --gateway=%s %s",
+				net.Name, net.Subnet, net.Gateway, net.Name,
+			)
+		}
+	}
+
+	if s.networkStatePath == "" {
+		return RenderOpts{}, errors.New("network state path not configured")
+	}
+
+	state, err := LoadNetworkState(s.networkStatePath)
+	if err != nil {
+		return RenderOpts{}, fmt.Errorf("loading network state: %w", err)
+	}
+
+	ip, err := AllocateIP(state, net.Subnet, s.project.Name)
+	if err != nil {
+		return RenderOpts{}, fmt.Errorf("allocating IP: %w", err)
+	}
+
+	if err := SaveNetworkState(s.networkStatePath, state); err != nil {
+		return RenderOpts{}, fmt.Errorf("saving network state: %w", err)
+	}
+
+	return RenderOpts{NetworkName: net.Name, NetworkIP: ip}, nil
 }
 
 // ErrNoEnvironment is returned when Down or Destroy is called without a prior Up.
@@ -199,6 +262,19 @@ func (s *EnvironmentService) Destroy() error {
 			if err := s.volumes.Remove(v.Name); err != nil {
 				return fmt.Errorf("removing volume %q: %w", v.Name, err)
 			}
+		}
+	}
+
+	// Free IP from network state if configured.
+	if s.networkStatePath != "" && s.globalConfig.Network.IsConfigured() {
+		state, loadErr := LoadNetworkState(s.networkStatePath)
+		if loadErr == nil {
+			FreeIP(state, s.project.Name)
+			if saveErr := SaveNetworkState(s.networkStatePath, state); saveErr != nil {
+				s.logf("warning: failed to save network state: %v", saveErr)
+			}
+		} else {
+			s.logf("warning: failed to load network state: %v", loadErr)
 		}
 	}
 

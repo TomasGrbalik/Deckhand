@@ -74,6 +74,12 @@ type CompanionVolumeEntry struct {
 	ServiceName string
 }
 
+// RenderOpts holds optional configuration for template rendering.
+type RenderOpts struct {
+	NetworkName string // Name of the external Docker network (empty = no network)
+	NetworkIP   string // Static IP for the devcontainer on the network
+}
+
 // templateData is the data structure passed to Go templates during rendering.
 // ExposedPorts contains only non-internal ports from the project config.
 // Vars contains template variables with defaults merged with project overrides.
@@ -86,6 +92,8 @@ type templateData struct {
 	NamedVolumes     []NamedVolumeEntry
 	Companions       []CompanionTemplateData
 	CompanionVolumes []CompanionVolumeEntry
+	NetworkName      string // External network name (empty if not configured)
+	NetworkIP        string // Static IP on the external network
 }
 
 // TemplateService renders project templates into Dockerfile and compose content.
@@ -105,7 +113,7 @@ func NewTemplateService(source TemplateSource, registry CompanionResolver) *Temp
 // configuration and resolved mounts. If the project has no template set, it
 // defaults to "base". Template variable defaults are merged with project
 // overrides — project values take precedence.
-func (s *TemplateService) Render(project domain.Project, mounts domain.Mounts) (*RenderedOutput, error) {
+func (s *TemplateService) Render(project domain.Project, mounts domain.Mounts, opts ...RenderOpts) (*RenderedOutput, error) {
 	name := project.Template
 	if name == "" {
 		name = "base"
@@ -124,6 +132,11 @@ func (s *TemplateService) Render(project domain.Project, mounts domain.Mounts) (
 	data, err := buildTemplateData(project, meta, mounts, s.registry)
 	if err != nil {
 		return nil, fmt.Errorf("building template data: %w", err)
+	}
+
+	if len(opts) > 0 {
+		data.NetworkName = opts[0].NetworkName
+		data.NetworkIP = opts[0].NetworkIP
 	}
 
 	dockerfile, err := render("Dockerfile", dockerfileTmpl, data)

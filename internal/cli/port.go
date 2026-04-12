@@ -95,10 +95,11 @@ func newPortAddCmd() *cobra.Command {
 				return err
 			}
 
-			svc, err := newPortService(proj, dir)
+			svc, cleanup, err := newPortService(proj, dir)
 			if err != nil {
 				return err
 			}
+			defer cleanup()
 			if err := svc.Add(port, name, protocol); err != nil {
 				return err
 			}
@@ -135,10 +136,11 @@ func newPortRemoveCmd() *cobra.Command {
 				return err
 			}
 
-			svc, err := newPortService(proj, dir)
+			svc, cleanup, err := newPortService(proj, dir)
 			if err != nil {
 				return err
 			}
+			defer cleanup()
 			if err := svc.Remove(port); err != nil {
 				return err
 			}
@@ -151,13 +153,13 @@ func newPortRemoveCmd() *cobra.Command {
 
 // newPortService creates a PortService wired to real config persistence
 // and environment recreation.
-func newPortService(proj *domain.Project, dir string) (*service.PortService, error) {
+func newPortService(proj *domain.Project, dir string) (*service.PortService, func(), error) {
 	cfgPath := config.ProjectConfigPath(dir)
-	envSvc, err := newEnvironmentService(*proj, dir)
+	envSvc, cleanup, err := newEnvironmentService(*proj, dir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return service.NewPortService(proj, cfgPath, configSaver{}, envSvc), nil
+	return service.NewPortService(proj, cfgPath, configSaver{}, envSvc), cleanup, nil
 }
 
 // configSaver implements service.ConfigWriter using config.Save.

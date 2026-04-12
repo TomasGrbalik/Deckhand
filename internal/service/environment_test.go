@@ -627,3 +627,186 @@ func TestUp_UnresolvableSecretLogsWarning(t *testing.T) {
 		t.Errorf("compose file not rendered correctly\nGot:\n%s", composeYAML)
 	}
 }
+
+// --- Network lifecycle tests ---
+
+// fakeNetworkChecker implements service.NetworkChecker for testing.
+type fakeNetworkChecker struct {
+	exists bool
+	err    error
+}
+
+func (f *fakeNetworkChecker) NetworkExists(_ string) (bool, error) {
+	return f.exists, f.err
+}
+
+func TestUp_WithNetworkAllocatesIP(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "network-state.yaml")
+	source := newFakeSource()
+	compose := &spyCompose{}
+	globalCfg := domain.GlobalConfig{
+		Network: domain.NetworkConfig{
+			Name:    "ssh-net",
+			Subnet:  "172.30.0.0/24",
+			Gateway: "172.30.0.1",
+		},
+	}
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc := service.NewEnvironmentService(source, compose, nil, globalCfg, project, dir)
+	svc.SetNetworkSupport(&fakeNetworkChecker{exists: true}, statePath)
+
+	if err := svc.Up(false); err != nil {
+		t.Fatalf("Up() error: %v", err)
+	}
+
+	// Verify compose output contains network config.
+	composeYAML, err := os.ReadFile(filepath.Join(dir, ".deckhand", "docker-compose.yml"))
+	if err != nil {
+		t.Fatalf("reading compose: %v", err)
+	}
+	content := string(composeYAML)
+	if !strings.Contains(content, "ssh-net:") {
+		t.Errorf("compose missing network name\nGot:\n%s", content)
+	}
+	if !strings.Contains(content, "ipv4_address: 172.30.0.10") {
+		t.Errorf("compose missing static IP\nGot:\n%s", content)
+	}
+
+	// Verify state file was written.
+	state, loadErr := service.LoadNetworkState(statePath)
+	if loadErr != nil {
+		t.Fatalf("LoadNetworkState() error: %v", loadErr)
+	}
+	if state.Assignments["myapp"] != "172.30.0.10" {
+		t.Errorf("expected IP 172.30.0.10 in state, got %v", state.Assignments)
+	}
+}
+
+func TestUp_WithNetworkReusesExistingIP(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "network-state.yaml")
+
+	// Pre-populate state with existing assignment.
+	state := &service.NetworkState{
+		Assignments: map[string]string{"myapp": "172.30.0.15"},
+	}
+	if err := service.SaveNetworkState(statePath, state); err != nil {
+		t.Fatalf("SaveNetworkState() error: %v", err)
+	}
+
+	source := newFakeSource()
+	compose := &spyCompose{}
+	globalCfg := domain.GlobalConfig{
+		Network: domain.NetworkConfig{
+			Name:    "ssh-net",
+			Subnet:  "172.30.0.0/24",
+			Gateway: "172.30.0.1",
+		},
+	}
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc := service.NewEnvironmentService(source, compose, nil, globalCfg, project, dir)
+	svc.SetNetworkSupport(&fakeNetworkChecker{exists: true}, statePath)
+
+	if err := svc.Up(false); err != nil {
+		t.Fatalf("Up() error: %v", err)
+	}
+
+	// Should reuse the existing IP.
+	composeYAML, _ := os.ReadFile(filepath.Join(dir, ".deckhand", "docker-compose.yml"))
+	if !strings.Contains(string(composeYAML), "ipv4_address: 172.30.0.15") {
+		t.Errorf("should reuse existing IP 172.30.0.15\nGot:\n%s", composeYAML)
+	}
+}
+
+func TestUp_NetworkDoesNotExist(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "network-state.yaml")
+	source := newFakeSource()
+	compose := &spyCompose{}
+	globalCfg := domain.GlobalConfig{
+		Network: domain.NetworkConfig{
+			Name:    "ssh-net",
+			Subnet:  "172.30.0.0/24",
+			Gateway: "172.30.0.1",
+		},
+	}
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc := service.NewEnvironmentService(source, compose, nil, globalCfg, project, dir)
+	svc.SetNetworkSupport(&fakeNetworkChecker{exists: false}, statePath)
+
+	err := svc.Up(false)
+	if err == nil {
+		t.Fatal("expected error when network doesn't exist")
+	}
+	if !strings.Contains(err.Error(), "does not exist") {
+		t.Errorf("error should mention network doesn't exist, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "docker network create") {
+		t.Errorf("error should include create command, got: %v", err)
+	}
+
+	// Compose should not be called.
+	if len(compose.upCalls) != 0 {
+		t.Error("compose up should not be called when network doesn't exist")
+	}
+}
+
+func TestUp_NoNetworkConfigured(t *testing.T) {
+	svc, compose, dir := newTestEnv(t)
+
+	if err := svc.Up(false); err != nil {
+		t.Fatalf("Up() error: %v", err)
+	}
+
+	// Should work normally without network config.
+	composeYAML, _ := os.ReadFile(filepath.Join(dir, ".deckhand", "docker-compose.yml"))
+	if strings.Contains(string(composeYAML), "networks:") {
+		t.Errorf("compose should not have networks section\nGot:\n%s", composeYAML)
+	}
+	if len(compose.upCalls) != 1 {
+		t.Fatalf("expected 1 Up call, got %d", len(compose.upCalls))
+	}
+}
+
+func TestDestroy_FreesIP(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "network-state.yaml")
+
+	// Pre-populate state.
+	state := &service.NetworkState{
+		Assignments: map[string]string{
+			"myapp": "172.30.0.10",
+			"other": "172.30.0.11",
+		},
+	}
+	if err := service.SaveNetworkState(statePath, state); err != nil {
+		t.Fatalf("SaveNetworkState() error: %v", err)
+	}
+
+	source := newFakeSource()
+	compose := &spyCompose{}
+	globalCfg := domain.GlobalConfig{
+		Network: domain.NetworkConfig{
+			Name:    "ssh-net",
+			Subnet:  "172.30.0.0/24",
+			Gateway: "172.30.0.1",
+		},
+	}
+	project := domain.Project{Name: "myapp", Template: "base"}
+	svc := service.NewEnvironmentService(source, compose, nil, globalCfg, project, dir)
+	svc.SetNetworkSupport(nil, statePath)
+
+	if err := svc.Destroy(); err != nil {
+		t.Fatalf("Destroy() error: %v", err)
+	}
+
+	// Verify IP was freed.
+	loaded, _ := service.LoadNetworkState(statePath)
+	if _, ok := loaded.Assignments["myapp"]; ok {
+		t.Error("myapp IP should be freed after destroy")
+	}
+	if loaded.Assignments["other"] != "172.30.0.11" {
+		t.Error("other project IP should be unchanged")
+	}
+}

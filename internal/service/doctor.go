@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 
 	"github.com/TomasGrbalik/deckhand/internal/domain"
@@ -30,6 +31,7 @@ type CheckResult struct {
 type DockerChecker interface {
 	Ping() error
 	ComposeVersion() (string, error)
+	NetworkExists(name string) (bool, error)
 }
 
 // ConfigLoader abstracts config file loading so tests can inject fakes.
@@ -61,12 +63,15 @@ func (s *DoctorService) RunChecks(projectDir string) []CheckResult {
 
 	results = append(results, s.checkDocker())
 	results = append(results, s.checkCompose())
-	results = append(results, s.checkGlobalConfig())
+
+	globalResult, globalCfg := s.checkGlobalConfigWithResult()
+	results = append(results, globalResult)
 
 	projResult, proj := s.checkProjectConfig(projectDir)
 	results = append(results, projResult)
 
 	results = append(results, s.checkTemplate(proj))
+	results = append(results, s.checkNetwork(globalCfg))
 
 	return results
 }
@@ -112,20 +117,22 @@ func (s *DoctorService) checkCompose() CheckResult {
 	}
 }
 
-func (s *DoctorService) checkGlobalConfig() CheckResult {
-	_, err := s.config.LoadGlobal()
+// checkGlobalConfigWithResult returns the check result and the loaded config.
+// The config is passed to checkNetwork.
+func (s *DoctorService) checkGlobalConfigWithResult() (CheckResult, *domain.GlobalConfig) {
+	cfg, err := s.config.LoadGlobal()
 	if err != nil {
 		return CheckResult{
 			Name:    "Global config",
 			Status:  CheckFail,
 			Message: err.Error(),
-		}
+		}, nil
 	}
 	return CheckResult{
 		Name:    "Global config",
 		Status:  CheckPass,
 		Message: "valid",
-	}
+	}, cfg
 }
 
 // checkProjectConfig returns the check result and the loaded project (nil if
@@ -173,5 +180,39 @@ func (s *DoctorService) checkTemplate(proj *domain.Project) CheckResult {
 		Name:    "Template",
 		Status:  CheckPass,
 		Message: "template " + proj.Template + " found",
+	}
+}
+
+func (s *DoctorService) checkNetwork(cfg *domain.GlobalConfig) CheckResult {
+	if cfg == nil || !cfg.Network.IsConfigured() {
+		return CheckResult{
+			Name:    "Docker network",
+			Status:  CheckSkip,
+			Message: "no network configured in global config",
+		}
+	}
+
+	net := cfg.Network
+	exists, err := s.docker.NetworkExists(net.Name)
+	if err != nil {
+		return CheckResult{
+			Name:    "Docker network",
+			Status:  CheckFail,
+			Message: err.Error(),
+		}
+	}
+	if !exists {
+		return CheckResult{
+			Name:   "Docker network",
+			Status: CheckFail,
+			Message: fmt.Sprintf("network %q not found — create it with:\n  docker network create --driver=bridge --subnet=%s --gateway=%s %s",
+				net.Name, net.Subnet, net.Gateway, net.Name),
+		}
+	}
+
+	return CheckResult{
+		Name:    "Docker network",
+		Status:  CheckPass,
+		Message: "network " + net.Name + " exists",
 	}
 }
