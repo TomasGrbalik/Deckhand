@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -94,6 +95,23 @@ func TestAllocateIP_FillsGaps(t *testing.T) {
 
 	if ip != "172.30.0.11" {
 		t.Errorf("expected gap-fill 172.30.0.11, got %s", ip)
+	}
+}
+
+func TestAllocateIP_SkipsBroadcast(t *testing.T) {
+	// /30 subnet: 172.30.0.0, .1 (gw), .2, .3 (broadcast).
+	// Starting at .10 offset won't work for /30, so use a larger subnet
+	// but fill up to just before broadcast.
+	// Use /28: 172.30.0.0 - 172.30.0.15 (broadcast = .15).
+	state := &service.NetworkState{Assignments: map[string]string{}}
+	// Fill .10 through .14
+	for i := 10; i <= 14; i++ {
+		state.Assignments[fmt.Sprintf("proj%d", i)] = fmt.Sprintf("172.30.0.%d", i)
+	}
+	// Next candidate would be .15 (broadcast) — should be skipped.
+	_, err := service.AllocateIP(state, "172.30.0.0/28", "new")
+	if err == nil {
+		t.Fatal("expected error — no free IPs (broadcast should be excluded)")
 	}
 }
 

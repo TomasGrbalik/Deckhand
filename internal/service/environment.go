@@ -268,13 +268,12 @@ func (s *EnvironmentService) Destroy() error {
 	// Free IP from network state if configured.
 	if s.networkStatePath != "" && s.globalConfig.Network.IsConfigured() {
 		state, loadErr := LoadNetworkState(s.networkStatePath)
-		if loadErr == nil {
-			FreeIP(state, s.project.Name)
-			if saveErr := SaveNetworkState(s.networkStatePath, state); saveErr != nil {
-				s.logf("warning: failed to save network state: %v", saveErr)
-			}
-		} else {
-			s.logf("warning: failed to load network state: %v", loadErr)
+		if loadErr != nil {
+			return fmt.Errorf("loading network state for IP release: %w", loadErr)
+		}
+		FreeIP(state, s.project.Name)
+		if saveErr := SaveNetworkState(s.networkStatePath, state); saveErr != nil {
+			return fmt.Errorf("saving network state after IP release: %w", saveErr)
 		}
 	}
 

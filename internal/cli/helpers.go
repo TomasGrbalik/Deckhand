@@ -61,7 +61,10 @@ func newEnvironmentService(proj domain.Project, dir string) (*service.Environmen
 
 	cleanup := func() {}
 	if globalCfg.Network.IsConfigured() {
-		statePath, _ := config.NetworkStatePath()
+		statePath, pathErr := config.NetworkStatePath()
+		if pathErr != nil {
+			return nil, nil, fmt.Errorf("resolving network state path: %w", pathErr)
+		}
 		client, clientErr := docker.NewClient(context.Background())
 		if clientErr != nil {
 			return nil, nil, fmt.Errorf("connecting to docker: %w", clientErr)
@@ -128,7 +131,11 @@ func newEnvironmentServiceWithVolumes(proj domain.Project, dir string) (*service
 	svc.SetLogger(stderrLogger)
 
 	if globalCfg.Network.IsConfigured() {
-		statePath, _ := config.NetworkStatePath()
+		statePath, pathErr := config.NetworkStatePath()
+		if pathErr != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("resolving network state path: %w", pathErr)
+		}
 		svc.SetNetworkSupport(nil, statePath) // No checker needed for destroy.
 	}
 

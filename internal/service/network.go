@@ -83,6 +83,8 @@ func AllocateIP(state *NetworkState, subnet, projectName string) (string, error)
 		}
 	}
 
+	broadcast := broadcastAddr(prefix)
+
 	// Start at base + ipOffset (e.g., 172.30.0.10).
 	candidate := prefix.Addr()
 	for range ipOffset {
@@ -90,7 +92,7 @@ func AllocateIP(state *NetworkState, subnet, projectName string) (string, error)
 	}
 
 	for prefix.Contains(candidate) {
-		if !used[candidate] {
+		if candidate != broadcast && !used[candidate] {
 			state.Assignments[projectName] = candidate.String()
 			return candidate.String(), nil
 		}
@@ -109,4 +111,17 @@ func FreeIP(state *NetworkState, projectName string) {
 // ProjectIP returns the assigned IP for a project, or empty string if none.
 func ProjectIP(state *NetworkState, projectName string) string {
 	return state.Assignments[projectName]
+}
+
+// broadcastAddr computes the broadcast address for an IPv4 prefix.
+// For example, 172.30.0.0/24 → 172.30.0.255.
+func broadcastAddr(prefix netip.Prefix) netip.Addr {
+	addr := prefix.Addr()
+	bits := prefix.Bits()
+	b := addr.As4()
+	// Set host bits to 1.
+	for i := bits; i < 32; i++ {
+		b[i/8] |= 1 << (7 - i%8)
+	}
+	return netip.AddrFrom4(b)
 }

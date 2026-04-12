@@ -35,12 +35,15 @@ func newListCmd() *cobra.Command {
 			}
 
 			// Check if network is configured for IP column.
-			globalCfg, _ := loadGlobalConfig()
-			var networkState *service.NetworkState
-			if globalCfg.Network.IsConfigured() {
+			globalCfg, cfgErr := loadGlobalConfig()
+			showIPColumn := cfgErr == nil && globalCfg.Network.IsConfigured()
+			networkState := &service.NetworkState{Assignments: map[string]string{}}
+			if showIPColumn {
 				statePath, pathErr := config.NetworkStatePath()
 				if pathErr == nil {
-					networkState, _ = service.LoadNetworkState(statePath)
+					if loaded, loadErr := service.LoadNetworkState(statePath); loadErr == nil {
+						networkState = loaded
+					}
 				}
 			}
 
@@ -49,7 +52,7 @@ func newListCmd() *cobra.Command {
 
 			out := cmd.OutOrStdout()
 			w := tabwriter.NewWriter(out, 0, 0, 3, ' ', 0)
-			if networkState != nil {
+			if showIPColumn {
 				fmt.Fprintln(w, "PROJECT\tSTATUS\tIP\tSERVICES\tUPTIME")
 				for _, p := range projects {
 					ip := service.ProjectIP(networkState, p.name)

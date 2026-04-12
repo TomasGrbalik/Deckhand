@@ -9,7 +9,7 @@ type NetworkConfig struct {
 	Gateway string `yaml:"gateway"`
 }
 
-// IsConfigured returns true if the network block has a name set.
+// IsConfigured returns true if all required network fields are set.
 func (n NetworkConfig) IsConfigured() bool {
-	return n.Name != ""
+	return n.Name != "" && n.Subnet != "" && n.Gateway != ""
 }

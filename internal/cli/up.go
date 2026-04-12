@@ -27,7 +27,9 @@ func newUpCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer cleanup()
+			if cleanup != nil {
+				defer cleanup()
+			}
 
 			if err := svc.Up(build); err != nil {
 				return fmt.Errorf("starting environment: %w", err)

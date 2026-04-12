@@ -99,7 +99,9 @@ func newPortAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer cleanup()
+			if cleanup != nil {
+				defer cleanup()
+			}
 			if err := svc.Add(port, name, protocol); err != nil {
 				return err
 			}
@@ -140,7 +142,9 @@ func newPortRemoveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer cleanup()
+			if cleanup != nil {
+				defer cleanup()
+			}
 			if err := svc.Remove(port); err != nil {
 				return err
 			}
