@@ -84,6 +84,11 @@ ssh:
   user: dev
   host: 100.64.1.3
 
+network:
+  name: ssh-net
+  subnet: 172.30.0.0/24
+  gateway: 172.30.0.1
+
 mounts:
   secrets:
     - name: gh-token
@@ -108,6 +113,9 @@ mounts:
 | `defaults.shell` | string | Default shell command (e.g. `zsh`). |
 | `ssh.user` | string | SSH user for `deckhand connect`. |
 | `ssh.host` | string | SSH host for `deckhand connect`. |
+| `network.name` | string | Name of the shared Docker network for SSH access. See [Networking](networking.md). |
+| `network.subnet` | string | Subnet CIDR (e.g. `172.30.0.0/24`). |
+| `network.gateway` | string | Gateway address (e.g. `172.30.0.1`). |
 | `mounts` | object | Global mounts merged into every project. See [Mounts](mounts.md). |
 
 ## Precedence
