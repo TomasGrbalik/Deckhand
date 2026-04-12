@@ -81,9 +81,17 @@ golangci-lint fmt ./... # Format code
 - Run `go mod tidy` after adding/removing dependencies
 - Quality hooks run automatically — don't disable them
 
+## Templates
+
+- Built-in templates: `base` (Ubuntu), `python` (Python + pyright/debugpy).
+- Users can add templates in `~/.config/deckhand/templates/<name>/` (user-global) or `.deckhand/templates/<name>/` (project-local).
+- Precedence: local → user → builtin.
+- **To create a new template**, read `design/custom-templates.md` — it documents the full template contract: file structure, metadata schema, available template variables, and a worked example.
+
 ## For Agents
 
 - Before starting work, validate that this CLAUDE.md still reflects the actual codebase. If the structure, conventions, or architecture have drifted, update this file first.
 - Check `design/phases/` to understand what phase we're in and what's been completed.
 - Read the relevant design docs before implementing — don't guess at the intended behavior.
+- When creating new templates, read `design/custom-templates.md` for the complete template authoring guide.
 - The user is learning Go — explain Go-specific decisions when they're non-obvious.
