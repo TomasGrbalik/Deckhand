@@ -1,6 +1,6 @@
 module github.com/TomasGrbalik/deckhand
 
-go 1.26.2
+go 1.26
 
 require (
 	github.com/charmbracelet/huh v1.0.0
