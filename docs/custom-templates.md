@@ -1,10 +1,11 @@
-> **Note:** The user-facing version of this guide is at [docs/custom-templates.md](../docs/custom-templates.md).
+# Custom Templates
 
-# Creating Custom Templates
+Deckhand ships with two built-in templates (`base` and `python`), but you can create your own for any language or toolchain. Custom templates let you define the dev container image (via a Dockerfile) and optionally customize the Compose service definition.
 
-This guide explains how to create custom deckhand templates. A template defines the dev container image (via a Dockerfile) and optionally customizes the Compose service definition.
+Place templates in one of two locations:
 
-Deckhand ships with two built-in templates (`base` and `python`). You can create your own for any language or toolchain.
+- **Project-local** (`.deckhand/templates/<name>/`) — shared with your team via version control
+- **User-global** (`~/.config/deckhand/templates/<name>/`) — available to all projects on this machine
 
 ## Template Structure
 
@@ -19,16 +20,14 @@ A template is a directory containing two or three files:
 
 All three files are described in detail below.
 
-## Where to Place Templates
-
-Templates can live in two locations:
+### Where to Place Templates
 
 | Location | Source label | Discovered by |
 |----------|-------------|---------------|
 | `~/.config/deckhand/templates/<name>/` | `user` | All projects on this machine |
 | `.deckhand/templates/<name>/` (project root) | `local` | This project only |
 
-**Precedence** (highest to lowest): **local → user → builtin**
+**Precedence** (highest to lowest): **local > user > builtin**
 
 If a template named `node` exists in both `.deckhand/templates/` and `~/.config/deckhand/templates/`, the local one wins. Built-in templates (`base`, `python`) are the fallback.
 
@@ -51,7 +50,7 @@ name: <string>
 # Optional. Human-readable summary shown in `deckhand template list`.
 description: <string>
 
-# Optional. Map of variable-name → {default, description}.
+# Optional. Map of variable-name -> {default, description}.
 # Each variable becomes available in Dockerfile.tmpl as {{ .Vars.<name> }}.
 # Users override defaults in .deckhand.yaml under `variables:`.
 variables:
@@ -154,6 +153,8 @@ The full `templateData` struct is available. Here are all fields:
 | `.Companions` | `[]CompanionTemplateData` | Companion services (e.g., postgres, redis) |
 | `.NamedVolumes` | `[]NamedVolumeEntry` | Named volumes for the dev container |
 | `.CompanionVolumes` | `[]CompanionVolumeEntry` | Named volumes for companion services |
+| `.NetworkName` | `string` | External Docker network name (empty if not configured) |
+| `.NetworkIP` | `string` | Static IP for devcontainer on external network |
 
 #### VolumeEntry
 
@@ -287,7 +288,7 @@ deckhand template list   # Should show "node" with source "local" or "user"
 deckhand up              # Builds and starts the container
 ```
 
-## Reference: Built-in Templates
+## Built-in Template Reference
 
 ### base
 
@@ -300,6 +301,56 @@ Python container based on `python:<version>-slim`. Includes pyright and debugpy.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `python_version` | `3.12` | Python version to install |
+
+## Best Practices
+
+- **Use slim base images** and clean up package manager caches (`rm -rf /var/lib/apt/lists/*`) to keep images small and builds fast.
+- **Declare all variables** referenced in `Dockerfile.tmpl` in `metadata.yaml`. Undeclared variables render as empty strings with no warning.
+- **Choose sensible defaults** that work out-of-the-box. Users can always override via `.deckhand.yaml`.
+- **Don't override compose.yaml.tmpl** unless you genuinely need to change the service topology. The built-in Compose template handles volumes, ports, environment, companions, and labels automatically.
+- **Always include a workspace volume mount** in `metadata.yaml` so the project directory is available inside the container.
+- **Test your template** with `deckhand template list` (verify discovery) then `deckhand up` (verify it builds and runs).
+
+## Guide for AI Agents
+
+This section provides a structured recipe for AI agents (such as Claude Code) creating templates programmatically.
+
+### Step-by-step recipe
+
+1. **Identify the language/runtime** and choose a base image (prefer official slim variants).
+2. **Create the template directory** at `.deckhand/templates/<name>/` (project-local) or `~/.config/deckhand/templates/<name>/` (user-global).
+3. **Write `metadata.yaml`** with:
+   - `name` matching the directory name exactly
+   - `description` explaining the template's purpose
+   - `variables` for anything configurable (e.g., language version)
+   - A `workspace` volume mount targeting `/workspace`
+4. **Write `Dockerfile.tmpl`** following all conventions:
+   - Three-line "DO NOT EDIT" header
+   - `FROM` using the chosen base image with version variable
+   - Install common dev tools (git, curl, etc.)
+   - Create the `dev` user (UID/GID 1000)
+   - Set `WORKDIR /workspace`
+   - End with `USER dev`
+5. **Do not create `compose.yaml.tmpl`** unless the service topology needs changes.
+6. **Update `.deckhand.yaml`** to set `template:` to the new template name.
+7. **Verify** with `deckhand template list` and `deckhand up`.
+
+### Constraints
+
+These are hard requirements — violating them will cause failures:
+
+- Directory name **must** match the `name` field in `metadata.yaml`
+- The three-line "DO NOT EDIT" header **must** be present in `Dockerfile.tmpl`
+- The `dev` user **must** be created with UID/GID 1000 — deckhand runs commands as this user
+- `WORKDIR` **must** be set to `/workspace`
+- Every `{{ .Vars.X }}` in `Dockerfile.tmpl` **must** be declared in `metadata.yaml` `variables`
+
+### Common pitfalls
+
+- Forgetting to create the `dev` user — container commands will fail
+- Mismatched directory name and `metadata.yaml` `name` field — template won't be discovered
+- Referencing a variable in `Dockerfile.tmpl` that isn't declared in `metadata.yaml` — renders as empty string silently
+- Using `latest` tags instead of version variables — makes environments non-reproducible
 
 ## Validation Checklist
 

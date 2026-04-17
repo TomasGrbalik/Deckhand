@@ -92,6 +92,7 @@ See [docs/commands.md](docs/commands.md) for detailed usage, flags, and examples
 
 - [Command Reference](docs/commands.md) — usage, flags, and examples for every command
 - [Configuration](docs/configuration.md) — project and global config files
+- [Custom Templates](docs/custom-templates.md) — create templates for any language or toolchain
 - [Networking](docs/networking.md) — shared Docker network with static IPs for direct SSH access via Tailscale
 - [Companion Services](docs/companion-services.md) — PostgreSQL, Redis, and more alongside your devcontainer
 - [Mounts](docs/mounts.md) — volumes, secrets, sockets, and credential recipes
