@@ -64,6 +64,17 @@ mounts:
   volumes:
     - name: <string>        # Volume identifier (prefixed with project name in Compose).
       target: <string>      # Mount path inside the container.
+
+# Optional. Overrides the devcontainer's long-running command. When absent,
+# deckhand uses "sleep infinity". Use this for templates that need to run a
+# daemon (sshd, a supervisor, etc.) without overriding compose.yaml.tmpl.
+command: <string>
+
+# Optional. User that `deckhand shell` and `deckhand exec` drop into. When
+# empty, the image's default user (Dockerfile `USER` directive) is used.
+# Pair with `command` when the container must start as root but you want
+# interactive sessions as a non-root user.
+exec_user: <string>
 ```
 
 ### Example
@@ -301,6 +312,22 @@ Python container based on `python:<version>-slim`. Includes pyright and debugpy.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `python_version` | `3.12` | Python version to install |
+
+## Long-running daemons (`command` + `exec_user`)
+
+Most templates are happy with the default `sleep infinity` devcontainer command — you build the image, the container sits idle, and `deckhand shell` / `exec` drop you in. Templates that run a service (sshd, a language server, a queue worker) can declare it declaratively:
+
+```yaml
+# metadata.yaml
+name: sshd-box
+command: "/usr/sbin/sshd -D -e"
+exec_user: dev
+```
+
+- `command` replaces the hardcoded `sleep infinity` in the rendered compose file. No `compose.yaml.tmpl` override needed.
+- `exec_user` tells `deckhand shell` and `deckhand exec` to run as that user, regardless of the Dockerfile's `USER` directive. This matters when a daemon requires root (e.g., sshd binding :22 and reading host keys) but you still want interactive sessions as `dev`.
+
+In that scenario, omit the final `USER dev` from your Dockerfile so the container starts as root; `exec_user: dev` ensures your shells still land in the non-root user.
 
 ## Best Practices
 

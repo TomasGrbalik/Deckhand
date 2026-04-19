@@ -31,7 +31,12 @@ func newShellCmd() *cobra.Command {
 			}
 			defer cleanup()
 
-			if err := svc.Shell(proj.Name, serviceName, strings.Fields(shellCmd)); err != nil {
+			execUser, err := resolveExecUser(dir, proj.Template)
+			if err != nil {
+				return err
+			}
+
+			if err := svc.Shell(proj.Name, serviceName, strings.Fields(shellCmd), execUser); err != nil {
 				return fmt.Errorf("shell: %w", err)
 			}
 

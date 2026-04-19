@@ -332,12 +332,20 @@ type templateData struct {
 	CompanionVolumes []CompanionVolumeEntry
 	NetworkName      string
 	NetworkIP        string
+	Command          string
 }
 
 // renderCompose is a test helper that loads, parses, and executes a
 // compose template with the given data.
 func renderCompose(t *testing.T, templateName string, data templateData) string {
 	t.Helper()
+
+	// The compose template always reads .Command; the service layer is
+	// responsible for defaulting it. In these tests we mimic that default
+	// so callers don't have to set it explicitly.
+	if data.Command == "" {
+		data.Command = "sleep infinity"
+	}
 
 	_, composeTmpl, err := tmpl.Load(templateName)
 	if err != nil {

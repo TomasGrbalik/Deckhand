@@ -299,3 +299,56 @@ func TestEmbeddedSource_List(t *testing.T) {
 		t.Error("base template not found in embedded listing")
 	}
 }
+
+func TestFilesystemSource_LoadMeta_ParsesCommandAndExecUser(t *testing.T) {
+	dir := t.TempDir()
+	tmplDir := filepath.Join(dir, "daemon")
+	if err := os.Mkdir(tmplDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meta := `name: daemon
+description: runs a daemon
+command: "/usr/sbin/sshd -D -e"
+exec_user: dev
+variables: {}
+`
+	if err := os.WriteFile(filepath.Join(tmplDir, "metadata.yaml"), []byte(meta), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := &tmpl.FilesystemSource{Dir: dir}
+	got, err := fs.LoadMeta("daemon")
+	if err != nil {
+		t.Fatalf("LoadMeta() error: %v", err)
+	}
+	if got.Command != "/usr/sbin/sshd -D -e" {
+		t.Errorf("Command = %q, want %q", got.Command, "/usr/sbin/sshd -D -e")
+	}
+	if got.ExecUser != "dev" {
+		t.Errorf("ExecUser = %q, want %q", got.ExecUser, "dev")
+	}
+}
+
+func TestFilesystemSource_LoadMeta_AbsentCommandAndExecUser(t *testing.T) {
+	dir := t.TempDir()
+	tmplDir := filepath.Join(dir, "plain")
+	if err := os.Mkdir(tmplDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meta := "name: plain\ndescription: plain template\nvariables: {}\n"
+	if err := os.WriteFile(filepath.Join(tmplDir, "metadata.yaml"), []byte(meta), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := &tmpl.FilesystemSource{Dir: dir}
+	got, err := fs.LoadMeta("plain")
+	if err != nil {
+		t.Fatalf("LoadMeta() error: %v", err)
+	}
+	if got.Command != "" {
+		t.Errorf("Command = %q, want empty", got.Command)
+	}
+	if got.ExecUser != "" {
+		t.Errorf("ExecUser = %q, want empty", got.ExecUser)
+	}
+}

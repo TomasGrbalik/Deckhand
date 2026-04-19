@@ -45,8 +45,9 @@ func NewContainer(api client.APIClient) *Container {
 
 // Exec runs a command inside a container, identified by name or ID.
 // When tty is true, stdin is attached and the terminal is put into raw mode
-// for interactive use.
-func (c *Container) Exec(containerName string, cmd []string, tty bool) error {
+// for interactive use. When user is non-empty, the exec runs as that user;
+// empty falls back to the container image's default user.
+func (c *Container) Exec(containerName string, cmd []string, tty bool, user string) error {
 	ctx := context.Background()
 
 	execCfg := client.ExecCreateOptions{
@@ -55,6 +56,7 @@ func (c *Container) Exec(containerName string, cmd []string, tty bool) error {
 		AttachStdout: true,
 		AttachStderr: true,
 		TTY:          tty,
+		User:         user,
 	}
 
 	execID, err := c.api.ExecCreate(ctx, containerName, execCfg)
