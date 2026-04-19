@@ -6,9 +6,23 @@ Deckhand manages the full lifecycle of containerized dev environments — from s
 
 ## Install
 
-### Binary download (GitHub Releases)
+### One-liner install (Linux amd64/arm64)
 
-Download the latest release for your platform:
+```bash
+curl -sSL https://raw.githubusercontent.com/TomasGrbalik/Deckhand/main/install.sh | sh
+```
+
+This detects your architecture, downloads the latest release tarball and its `checksums.txt`, verifies the SHA256, and installs the binary to `/usr/local/bin/deckhand`.
+
+Pin a specific version:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/TomasGrbalik/Deckhand/main/install.sh | VERSION=v0.2.0 sh
+```
+
+### Binary download (manual)
+
+If you prefer to download manually:
 
 ```bash
 # Linux amd64
@@ -17,16 +31,9 @@ curl -Lo deckhand.tar.gz "https://github.com/TomasGrbalik/Deckhand/releases/late
 tar xzf deckhand.tar.gz deckhand
 sudo mv deckhand /usr/local/bin/
 rm deckhand.tar.gz
-
-# Linux arm64
-VERSION=$(curl -sL https://api.github.com/repos/TomasGrbalik/Deckhand/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')
-curl -Lo deckhand.tar.gz "https://github.com/TomasGrbalik/Deckhand/releases/latest/download/deckhand_${VERSION}_linux_arm64.tar.gz"
-tar xzf deckhand.tar.gz deckhand
-sudo mv deckhand /usr/local/bin/
-rm deckhand.tar.gz
 ```
 
-Each release includes a `checksums.txt` file for verification.
+Each release includes a `checksums.txt` file for verification. For arm64, replace `amd64` with `arm64`.
 
 ### go install
 
