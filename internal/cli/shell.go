@@ -31,9 +31,15 @@ func newShellCmd() *cobra.Command {
 			}
 			defer cleanup()
 
-			execUser, err := resolveExecUser(dir, proj.Template)
-			if err != nil {
-				return err
+			// exec_user is a devcontainer-scoped property of the project's
+			// template. Companion services (postgres, redis, ...) have their
+			// own image users and shouldn't inherit it.
+			var execUser string
+			if serviceName == "devcontainer" {
+				execUser, err = resolveExecUser(dir, proj.Template)
+				if err != nil {
+					return err
+				}
 			}
 
 			if err := svc.Shell(proj.Name, serviceName, strings.Fields(shellCmd), execUser); err != nil {

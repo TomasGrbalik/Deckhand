@@ -113,6 +113,12 @@ func TestExecNonInteractive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Exec() error: %v", err)
 	}
+
+	// Explicit user: root is always present in alpine, exercises the
+	// ExecCreateOptions.User path.
+	if err := ctr.Exec(name, []string{"true"}, false, "root"); err != nil {
+		t.Fatalf("Exec() with user=root error: %v", err)
+	}
 }
 
 func TestExecContainerNotFound(t *testing.T) {

@@ -37,7 +37,7 @@ command: <string>      # Optional. Devcontainer command. Defaults to "sleep infi
 exec_user: <string>    # Optional. User for `deckhand shell`/`exec`. Defaults to "" (image default user).
 ```
 
-Both fields are strings; absent is equivalent to empty. The service layer applies the `sleep infinity` default so `templateData.Command` is guaranteed non-empty at template-render time — the compose template never sees the default.
+Both fields are strings; absent is equivalent to empty. The service layer sets `templateData.Command` to the metadata value, falling back to `sleep infinity` when empty, before rendering — so the compose template reads `.Command` unconditionally and always sees a non-empty value.
 
 ### Code changes — deckhand repo
 
@@ -64,7 +64,7 @@ Branch: `feat/metadata-command-and-exec-user`. One commit, conventional-commits 
 
 Separate private GitHub repo (user: `TomasGrbalik`). Layout:
 
-```
+```text
 deckhand-templates/
 ├── README.md          # Purpose + install (`git clone <repo> ~/.config/deckhand/templates`)
 ├── .gitignore

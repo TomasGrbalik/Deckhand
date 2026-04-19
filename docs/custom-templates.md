@@ -329,6 +329,17 @@ exec_user: dev
 
 In that scenario, omit the final `USER dev` from your Dockerfile so the container starts as root; `exec_user: dev` ensures your shells still land in the non-root user.
 
+### PID 1 and signal handling
+
+A string `command` (like the sshd example above) is passed to Compose as **shell form**: Compose wraps it in `/bin/sh -c "..."`, so your daemon runs as a child of `sh`, not as PID 1. When deckhand stops the container, `docker stop` sends `SIGTERM` to PID 1 (the shell), which doesn't propagate to your daemon — you get a 10 s wait followed by `SIGKILL`. That's usually tolerable for a dev container but not ideal.
+
+Two ways to make the daemon PID 1 with a string `command`:
+
+1. Prefix with `exec`: `command: "exec /usr/sbin/sshd -D -e"` — the shell replaces itself with your process.
+2. Have the daemon be an init-friendly binary directly: `command: "/usr/sbin/sshd -D -e"` works but with the caveat above.
+
+For true **exec form** (a YAML list, no shell wrapper) you still need to ship a `compose.yaml.tmpl` override — `command:` in `metadata.yaml` is string-only.
+
 ## Best Practices
 
 - **Use slim base images** and clean up package manager caches (`rm -rf /var/lib/apt/lists/*`) to keep images small and builds fast.
