@@ -170,6 +170,22 @@ func (a *volumeListerAdapter) Remove(volumeName string) error {
 	return a.vol.Remove(volumeName)
 }
 
+// resolveExecUser looks up the ExecUser declared in the project's template
+// metadata. Returns empty string when the project has no template set or when
+// the metadata doesn't declare exec_user. The template name defaults to "base"
+// matching TemplateService.Render to keep behavior consistent.
+func resolveExecUser(projectDir, templateName string) (string, error) {
+	name := templateName
+	if name == "" {
+		name = "base"
+	}
+	meta, err := templateSourceForProject(projectDir).LoadMeta(name)
+	if err != nil {
+		return "", fmt.Errorf("loading template metadata for %q: %w", name, err)
+	}
+	return meta.ExecUser, nil
+}
+
 // newContainerService creates a ContainerService wired to a real Docker client.
 func newContainerService() (*service.ContainerService, func(), error) {
 	client, err := docker.NewClient(context.Background())

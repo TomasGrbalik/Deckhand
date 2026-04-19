@@ -94,7 +94,12 @@ type templateData struct {
 	CompanionVolumes []CompanionVolumeEntry
 	NetworkName      string // External network name (empty if not configured)
 	NetworkIP        string // Static IP on the external network
+	Command          string // Devcontainer command (never empty at render time)
 }
+
+// defaultCommand is the devcontainer command used when a template's
+// metadata.yaml does not set one.
+const defaultCommand = "sleep infinity"
 
 // TemplateService renders project templates into Dockerfile and compose content.
 type TemplateService struct {
@@ -175,6 +180,11 @@ func buildTemplateData(project domain.Project, meta *domain.TemplateMeta, mounts
 		return templateData{}, err
 	}
 
+	command := defaultCommand
+	if meta != nil && meta.Command != "" {
+		command = meta.Command
+	}
+
 	return templateData{
 		Project:          project,
 		ExposedPorts:     exposed,
@@ -184,6 +194,7 @@ func buildTemplateData(project domain.Project, meta *domain.TemplateMeta, mounts
 		NamedVolumes:     namedVolumes,
 		Companions:       companions,
 		CompanionVolumes: companionVolumes,
+		Command:          command,
 	}, nil
 }
 

@@ -928,6 +928,63 @@ func TestRender_WithNetworkAndCompanions(t *testing.T) {
 	}
 }
 
+func TestRender_DefaultsCommandToSleepInfinity(t *testing.T) {
+	src := &fakeSource{
+		dockerfile: "FROM ubuntu",
+		compose:    "services:\n  devcontainer:\n    command: {{ printf \"%q\" .Command }}\n",
+		meta:       &domain.TemplateMeta{Name: "base"},
+	}
+	svc := service.NewTemplateService(src, nil)
+
+	out, err := svc.Render(domain.Project{Name: "myapp", Template: "base"}, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+	if !strings.Contains(out.Compose, `command: "sleep infinity"`) {
+		t.Errorf("expected default 'sleep infinity' command (quoted) in compose, got:\n%s", out.Compose)
+	}
+}
+
+func TestRender_UsesMetadataCommand(t *testing.T) {
+	src := &fakeSource{
+		dockerfile: "FROM ubuntu",
+		compose:    "services:\n  devcontainer:\n    command: {{ printf \"%q\" .Command }}\n",
+		meta:       &domain.TemplateMeta{Name: "general", Command: "/usr/sbin/sshd -D -e"},
+	}
+	svc := service.NewTemplateService(src, nil)
+
+	out, err := svc.Render(domain.Project{Name: "myapp", Template: "general"}, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+	if !strings.Contains(out.Compose, `command: "/usr/sbin/sshd -D -e"`) {
+		t.Errorf("expected metadata-provided command (quoted) in compose, got:\n%s", out.Compose)
+	}
+	if strings.Contains(out.Compose, "sleep infinity") {
+		t.Errorf("metadata command should override default; compose contains default:\n%s", out.Compose)
+	}
+}
+
+func TestRender_QuotesCommandWithYAMLMetachars(t *testing.T) {
+	// Verify that command values containing YAML-significant characters
+	// (hash comments, colons) are quoted so they survive YAML round-trip.
+	src := &fakeSource{
+		dockerfile: "FROM ubuntu",
+		compose:    "services:\n  devcontainer:\n    command: {{ printf \"%q\" .Command }}\n",
+		meta:       &domain.TemplateMeta{Name: "weird", Command: "bash -lc 'echo key: value # noted'"},
+	}
+	svc := service.NewTemplateService(src, nil)
+
+	out, err := svc.Render(domain.Project{Name: "myapp", Template: "weird"}, domain.Mounts{})
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+	// After the %q escape, the value is a valid double-quoted YAML string.
+	if !strings.Contains(out.Compose, `command: "bash -lc 'echo key: value # noted'"`) {
+		t.Errorf("expected command to be YAML-quoted with metachars preserved, got:\n%s", out.Compose)
+	}
+}
+
 func TestRender_NoNetwork(t *testing.T) {
 	svc := service.NewTemplateService(newFakeSource(), nil)
 

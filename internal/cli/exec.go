@@ -28,7 +28,12 @@ func newExecCmd() *cobra.Command {
 			}
 			defer cleanup()
 
-			if err := svc.Exec(proj.Name, "devcontainer", args); err != nil {
+			execUser, err := resolveExecUser(dir, proj.Template)
+			if err != nil {
+				return err
+			}
+
+			if err := svc.Exec(proj.Name, "devcontainer", args, execUser); err != nil {
 				return fmt.Errorf("exec: %w", err)
 			}
 

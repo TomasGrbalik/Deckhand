@@ -64,6 +64,17 @@ mounts:
   volumes:
     - name: <string>        # Volume identifier (prefixed with project name in Compose).
       target: <string>      # Mount path inside the container.
+
+# Optional. Overrides the devcontainer's long-running command. When absent,
+# deckhand uses "sleep infinity". Use this for templates that need to run a
+# daemon (sshd, a supervisor, etc.) without overriding compose.yaml.tmpl.
+command: <string>
+
+# Optional. User that `deckhand shell` and `deckhand exec` drop into. When
+# empty, the image's default user (Dockerfile `USER` directive) is used.
+# Pair with `command` when the container must start as root but you want
+# interactive sessions as a non-root user.
+exec_user: <string>
 ```
 
 ### Example
@@ -301,6 +312,33 @@ Python container based on `python:<version>-slim`. Includes pyright and debugpy.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `python_version` | `3.12` | Python version to install |
+
+## Long-running daemons (`command` + `exec_user`)
+
+Most templates are happy with the default `sleep infinity` devcontainer command — you build the image, the container sits idle, and `deckhand shell` / `exec` drop you in. Templates that run a service (sshd, a language server, a queue worker) can declare it declaratively:
+
+```yaml
+# metadata.yaml
+name: sshd-box
+command: "/usr/sbin/sshd -D -e"
+exec_user: dev
+```
+
+- `command` replaces the hardcoded `sleep infinity` in the rendered compose file. No `compose.yaml.tmpl` override needed.
+- `exec_user` tells `deckhand shell` and `deckhand exec` to run as that user, regardless of the Dockerfile's `USER` directive. This matters when a daemon requires root (e.g., sshd binding :22 and reading host keys) but you still want interactive sessions as `dev`.
+
+In that scenario, omit the final `USER dev` from your Dockerfile so the container starts as root; `exec_user: dev` ensures your shells still land in the non-root user.
+
+### PID 1 and signal handling
+
+A string `command` (like the sshd example above) is passed to Compose as **shell form**: Compose wraps it in `/bin/sh -c "..."`, so your daemon runs as a child of `sh`, not as PID 1. When deckhand stops the container, `docker stop` sends `SIGTERM` to PID 1 (the shell), which doesn't propagate to your daemon — you get a 10 s wait followed by `SIGKILL`. That's usually tolerable for a dev container but not ideal.
+
+Two ways to make the daemon PID 1 with a string `command`:
+
+1. Prefix with `exec`: `command: "exec /usr/sbin/sshd -D -e"` — the shell replaces itself with your process.
+2. Have the daemon be an init-friendly binary directly: `command: "/usr/sbin/sshd -D -e"` works but with the caveat above.
+
+For true **exec form** (a YAML list, no shell wrapper) you still need to ship a `compose.yaml.tmpl` override — `command:` in `metadata.yaml` is string-only.
 
 ## Best Practices
 

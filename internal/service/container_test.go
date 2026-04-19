@@ -31,6 +31,7 @@ type execCall struct {
 	containerName string
 	cmd           []string
 	tty           bool
+	user          string
 }
 
 type logsCall struct {
@@ -44,8 +45,8 @@ func (f *spyRunner) FindContainer(project, svc string) (string, error) {
 	return f.findResult, f.findErr
 }
 
-func (f *spyRunner) Exec(containerName string, cmd []string, tty bool) error {
-	f.execCalls = append(f.execCalls, execCall{containerName, cmd, tty})
+func (f *spyRunner) Exec(containerName string, cmd []string, tty bool, user string) error {
+	f.execCalls = append(f.execCalls, execCall{containerName, cmd, tty, user})
 	return f.execErr
 }
 
@@ -64,7 +65,7 @@ func newTestContainer(t *testing.T) (*service.ContainerService, *spyRunner) {
 func TestShell_FindsContainerAndExecsWithTTY(t *testing.T) {
 	svc, runner := newTestContainer(t)
 
-	if err := svc.Shell("myapp", "devcontainer", []string{"zsh"}); err != nil {
+	if err := svc.Shell("myapp", "devcontainer", []string{"zsh"}, ""); err != nil {
 		t.Fatalf("Shell() error: %v", err)
 	}
 
@@ -96,10 +97,40 @@ func TestShell_FindsContainerAndExecsWithTTY(t *testing.T) {
 	}
 }
 
+func TestShell_PropagatesUser(t *testing.T) {
+	svc, runner := newTestContainer(t)
+
+	if err := svc.Shell("myapp", "devcontainer", []string{"zsh"}, "dev"); err != nil {
+		t.Fatalf("Shell() error: %v", err)
+	}
+
+	if len(runner.execCalls) != 1 {
+		t.Fatalf("expected 1 Exec call, got %d", len(runner.execCalls))
+	}
+	if got := runner.execCalls[0].user; got != "dev" {
+		t.Errorf("Exec user = %q, want %q", got, "dev")
+	}
+}
+
+func TestExec_PropagatesUser(t *testing.T) {
+	svc, runner := newTestContainer(t)
+
+	if err := svc.Exec("myapp", "devcontainer", []string{"true"}, "root"); err != nil {
+		t.Fatalf("Exec() error: %v", err)
+	}
+
+	if len(runner.execCalls) != 1 {
+		t.Fatalf("expected 1 Exec call, got %d", len(runner.execCalls))
+	}
+	if got := runner.execCalls[0].user; got != "root" {
+		t.Errorf("Exec user = %q, want %q", got, "root")
+	}
+}
+
 func TestShell_CustomCommand(t *testing.T) {
 	svc, runner := newTestContainer(t)
 
-	if err := svc.Shell("myapp", "devcontainer", []string{"bash", "-l"}); err != nil {
+	if err := svc.Shell("myapp", "devcontainer", []string{"bash", "-l"}, ""); err != nil {
 		t.Fatalf("Shell() error: %v", err)
 	}
 
@@ -116,7 +147,7 @@ func TestExec_FindsContainerAndExecsWithoutTTY(t *testing.T) {
 	svc, runner := newTestContainer(t)
 
 	cmd := []string{"go", "test", "./..."}
-	if err := svc.Exec("myapp", "devcontainer", cmd); err != nil {
+	if err := svc.Exec("myapp", "devcontainer", cmd, ""); err != nil {
 		t.Fatalf("Exec() error: %v", err)
 	}
 
@@ -187,7 +218,7 @@ func TestShell_ContainerNotFound(t *testing.T) {
 	runner.findResult = ""
 	runner.findErr = errors.New("container not found for project \"myapp\" service \"devcontainer\"")
 
-	err := svc.Shell("myapp", "devcontainer", []string{"zsh"})
+	err := svc.Shell("myapp", "devcontainer", []string{"zsh"}, "")
 	if err == nil {
 		t.Fatal("expected error when container not found")
 	}
@@ -206,7 +237,7 @@ func TestExec_ContainerNotFound(t *testing.T) {
 	runner.findResult = ""
 	runner.findErr = errors.New("container not found")
 
-	err := svc.Exec("myapp", "devcontainer", []string{"go", "test"})
+	err := svc.Exec("myapp", "devcontainer", []string{"go", "test"}, "")
 	if err == nil {
 		t.Fatal("expected error when container not found")
 	}
@@ -238,7 +269,7 @@ func TestShell_ExecFails(t *testing.T) {
 	svc, runner := newTestContainer(t)
 	runner.execErr = errors.New("exec failed")
 
-	err := svc.Shell("myapp", "devcontainer", []string{"zsh"})
+	err := svc.Shell("myapp", "devcontainer", []string{"zsh"}, "")
 	if err == nil {
 		t.Fatal("expected error when exec fails")
 	}
@@ -251,7 +282,7 @@ func TestExec_ExecFails(t *testing.T) {
 	svc, runner := newTestContainer(t)
 	runner.execErr = errors.New("exec failed")
 
-	err := svc.Exec("myapp", "devcontainer", []string{"go", "test"})
+	err := svc.Exec("myapp", "devcontainer", []string{"go", "test"}, "")
 	if err == nil {
 		t.Fatal("expected error when exec fails")
 	}

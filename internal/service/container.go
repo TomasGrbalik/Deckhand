@@ -9,7 +9,7 @@ import (
 // provides the real implementation; tests use a fake.
 type ContainerRunner interface {
 	FindContainer(projectName, serviceName string) (string, error)
-	Exec(containerName string, cmd []string, tty bool) error
+	Exec(containerName string, cmd []string, tty bool, user string) error
 	Logs(containerName string, follow bool, tail string) (io.ReadCloser, error)
 }
 
@@ -28,15 +28,15 @@ func NewContainerService(runner ContainerRunner) *ContainerService {
 
 // Shell opens an interactive shell in the container for the given project
 // and service. The cmd parameter is the shell command and any args
-// (e.g. []string{"bash", "-l"}). No defaulting is done here — the caller
-// provides the shell to use.
-func (s *ContainerService) Shell(project, service string, cmd []string) error {
+// (e.g. []string{"bash", "-l"}). When user is non-empty, the shell runs as
+// that user; otherwise the image's default user is used.
+func (s *ContainerService) Shell(project, service string, cmd []string, user string) error {
 	containerID, err := s.runner.FindContainer(project, service)
 	if err != nil {
 		return fmt.Errorf("finding container: %w", err)
 	}
 
-	if err := s.runner.Exec(containerID, cmd, true); err != nil {
+	if err := s.runner.Exec(containerID, cmd, true, user); err != nil {
 		return fmt.Errorf("shell exec: %w", err)
 	}
 
@@ -44,14 +44,14 @@ func (s *ContainerService) Shell(project, service string, cmd []string) error {
 }
 
 // Exec runs a command (without TTY) in the container for the given project
-// and service.
-func (s *ContainerService) Exec(project, service string, cmd []string) error {
+// and service. When user is non-empty, the command runs as that user.
+func (s *ContainerService) Exec(project, service string, cmd []string, user string) error {
 	containerID, err := s.runner.FindContainer(project, service)
 	if err != nil {
 		return fmt.Errorf("finding container: %w", err)
 	}
 
-	if err := s.runner.Exec(containerID, cmd, false); err != nil {
+	if err := s.runner.Exec(containerID, cmd, false, user); err != nil {
 		return fmt.Errorf("exec: %w", err)
 	}
 

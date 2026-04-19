@@ -34,7 +34,7 @@ services:
       {{ .NetworkName }}:
         ipv4_address: {{ .NetworkIP }}
 {{- end }}
-    command: sleep infinity
+    command: {{ printf "%q" .Command }}
 {{- range .Companions }}
 
   {{ .Name }}:

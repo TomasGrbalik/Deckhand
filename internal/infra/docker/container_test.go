@@ -109,9 +109,15 @@ func TestExecNonInteractive(t *testing.T) {
 
 	ctr := docker.NewContainer(cli.API())
 	// Run a simple command without TTY.
-	err = ctr.Exec(name, []string{"echo", "hello"}, false)
+	err = ctr.Exec(name, []string{"echo", "hello"}, false, "")
 	if err != nil {
 		t.Fatalf("Exec() error: %v", err)
+	}
+
+	// Explicit user: root is always present in alpine, exercises the
+	// ExecCreateOptions.User path.
+	if err := ctr.Exec(name, []string{"true"}, false, "root"); err != nil {
+		t.Fatalf("Exec() with user=root error: %v", err)
 	}
 }
 
@@ -127,7 +133,7 @@ func TestExecContainerNotFound(t *testing.T) {
 	defer cli.Close()
 
 	ctr := docker.NewContainer(cli.API())
-	err = ctr.Exec("nonexistent-container-xyz", []string{"echo", "hello"}, false)
+	err = ctr.Exec("nonexistent-container-xyz", []string{"echo", "hello"}, false, "")
 	if err == nil {
 		t.Fatal("expected error for nonexistent container")
 	}

@@ -25,6 +25,14 @@ type TemplateMeta struct {
 	Description string                      `yaml:"description"`
 	Variables   map[string]TemplateVariable `yaml:"variables"`
 	Mounts      Mounts                      `yaml:"mounts,omitempty"`
+	// Command overrides the devcontainer's long-running command in the
+	// rendered compose file. When empty, the service layer defaults to
+	// "sleep infinity".
+	Command string `yaml:"command,omitempty"`
+	// ExecUser is the user that `deckhand shell` and `deckhand exec` drop
+	// into, independent of the Dockerfile's USER directive. Empty means the
+	// image's default user is used.
+	ExecUser string `yaml:"exec_user,omitempty"`
 }
 
 // TemplateInfo describes a discovered template for listing purposes.
