@@ -11,6 +11,9 @@ coverage.out
 # Claude Code hook debug logs
 .claude/hooks/hook-debug.log
 
+# Claude Code scheduled tasks runtime lock
+.claude/scheduled_tasks.lock
+
 # IDE
 .idea/
 .vscode/
