@@ -135,6 +135,9 @@ func (f *FilesystemSource) List() ([]domain.TemplateInfo, error) {
 		if !entry.IsDir() {
 			continue
 		}
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
 		meta, err := f.LoadMeta(entry.Name())
 		if err != nil {
 			log.Printf("warning: skipping %s template %q: %v", label, entry.Name(), err)
