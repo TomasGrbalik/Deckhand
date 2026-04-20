@@ -9,7 +9,7 @@ Deckhand manages the full lifecycle of containerized dev environments — from s
 ### One-liner install (Linux amd64/arm64)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/TomasGrbalik/Deckhand/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/TomasGrbalik/Deckhand/main/install.sh | sh
 ```
 
 This detects your architecture, downloads the latest release tarball and its `checksums.txt`, verifies the SHA256, and installs the binary to `/usr/local/bin/deckhand`.
@@ -17,7 +17,7 @@ This detects your architecture, downloads the latest release tarball and its `ch
 Pin a specific version:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/TomasGrbalik/Deckhand/main/install.sh | VERSION=v0.2.0 sh
+curl -fsSL https://raw.githubusercontent.com/TomasGrbalik/Deckhand/main/install.sh | VERSION=v0.2.0 sh
 ```
 
 ### Binary download (manual)

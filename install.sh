@@ -2,8 +2,8 @@
 # Deckhand install script.
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/TomasGrbalik/Deckhand/main/install.sh | sh
-#   curl -sSL https://raw.githubusercontent.com/TomasGrbalik/Deckhand/main/install.sh | VERSION=v0.2.0 sh
+#   curl -fsSL https://raw.githubusercontent.com/TomasGrbalik/Deckhand/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/TomasGrbalik/Deckhand/main/install.sh | VERSION=v0.2.0 sh
 
 set -eu
 
@@ -24,13 +24,14 @@ need_cmd() {
 	command -v "$1" >/dev/null 2>&1 || err "required command not found: $1"
 }
 
-need_cmd curl
-need_cmd tar
-need_cmd sha256sum
 need_cmd uname
 
 OS=$(uname -s)
 [ "$OS" = "Linux" ] || err "unsupported OS: $OS (only Linux is supported; use 'go install' for other platforms)"
+
+need_cmd curl
+need_cmd tar
+need_cmd sha256sum
 
 RAW_ARCH=$(uname -m)
 case "$RAW_ARCH" in
@@ -77,14 +78,14 @@ info "Extracting..."
 tar -xzf "${TMP}/${TARBALL}" -C "$TMP" deckhand
 
 TARGET="${INSTALL_DIR}/deckhand"
-if [ -w "$INSTALL_DIR" ] || ([ ! -e "$INSTALL_DIR" ] && mkdir -p "$INSTALL_DIR" 2>/dev/null); then
-	mv "${TMP}/deckhand" "$TARGET"
-	chmod +x "$TARGET"
+need_cmd install
+if [ -w "$INSTALL_DIR" ] || { [ ! -e "$INSTALL_DIR" ] && mkdir -p "$INSTALL_DIR" 2>/dev/null; }; then
+	install -m 0755 "${TMP}/deckhand" "$TARGET"
 else
 	info "Installing to ${TARGET} (requires sudo)..."
 	need_cmd sudo
-	sudo mv "${TMP}/deckhand" "$TARGET"
-	sudo chmod +x "$TARGET"
+	sudo install -d "$INSTALL_DIR"
+	sudo install -m 0755 -o root -g root "${TMP}/deckhand" "$TARGET"
 fi
 
 info "Installed: $("$TARGET" --version 2>/dev/null || printf 'deckhand %s' "$VERSION")"
